@@ -59,3 +59,9 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+
+# graphifyy writes an AST cache beside whatever directory it extracts from.
+# Ingestion always extracts from a torn-down temp dir, so this only appears
+# when someone runs the extractor against a working tree — but it is ~1.4 MB
+# of regenerable JSON and must never be committed.
+graphify-out/

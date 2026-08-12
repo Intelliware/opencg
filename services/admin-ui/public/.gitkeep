@@ -1,0 +1,3 @@
+Next.js expects a `public/` directory and the Dockerfile copies it into the
+runtime image. Git does not track empty directories, so without this file the
+admin-ui build fails with "/app/services/admin-ui/public: not found".

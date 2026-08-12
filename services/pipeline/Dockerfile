@@ -13,12 +13,18 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.10 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Workspace files
-COPY pyproject.toml ./
+# Workspace files. uv.lock covers every workspace member, so each member's
+# pyproject must be present for --locked to verify against it — hence
+# services/ingestion, even though this image never runs it.
+COPY pyproject.toml uv.lock ./
 COPY packages/shared-py /app/packages/shared-py
 COPY services/pipeline /app/services/pipeline
+COPY services/ingestion /app/services/ingestion
 
-RUN uv sync --no-dev --all-packages
+# --locked, not a bare sync: without the lockfile the image resolved
+# dependencies afresh on every build, so it could silently run different
+# versions than the ones pinned for local development.
+RUN uv sync --locked --no-dev --all-packages
 
 ENV OPENCG_CONFIG=/app/opencg.yaml
 COPY opencg.yaml /app/opencg.yaml

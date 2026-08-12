@@ -12,7 +12,15 @@ dependencies = [
   # Code-side ingestion: graphifyy provides language-aware file discovery
   # (collect_files) + tree-sitter symbol extraction (extract). See
   # openspec/changes/adopt-graphifyy/ for the contract.
-  "graphifyy>=0.8,<0.9",
+  # Floor is 0.8.51: 0.8.38 mis-attributes a function's body to a type in its
+  # own signature (7KB of `write_code_graph` filed under `any`), fixed by .51.
+  # Ceiling stays below 0.9 — 0.9.x derives symbol ids from the absolute path,
+  # so ids embed the temp directory and differ on every run. That reintroduces
+  # the leak fixed by archive/2026-06-16-fix-code-graph-filename-leak and
+  # breaks the entity_id stability the catalog depends on. Verified: 0.8.51
+  # yields `checks_normalize` on three consecutive runs, 0.9.41 yields three
+  # different ids. `test_extract_code_symbol_ids_are_stable` guards this.
+  "graphifyy>=0.8.51,<0.9",
 ]
 
 [project.optional-dependencies]

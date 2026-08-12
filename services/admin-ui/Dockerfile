@@ -5,7 +5,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY services/admin-ui ./services/admin-ui
-RUN pnpm install --filter @opencg/admin-ui... --frozen-lockfile || pnpm install --filter @opencg/admin-ui...
+# No `|| pnpm install` fallback: it turned a stale-lockfile failure into a
+# silent unfrozen resolve, so the image could install versions nobody pinned.
+RUN pnpm install --filter @opencg/admin-ui... --frozen-lockfile
 RUN pnpm --filter @opencg/shared build
 RUN pnpm --filter @opencg/admin-ui build
 
