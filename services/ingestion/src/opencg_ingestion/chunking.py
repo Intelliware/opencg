@@ -12,10 +12,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-import graphify
 import graphify.extract as gex
+
+from opencg_ingestion.graphifyy_version import graphifyy_extractor_version
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,15 @@ def chunk_text(
 # ---------------------------------------------------------------------------
 
 
+# Why the chunker produced what it produced. Only `symbols` and `no_symbols`
+# represent complete work; a consumer deciding whether a file can be certified
+# finished must treat `partial` and `extract_failed` as unfinished. The three
+# non-`symbols` values were previously indistinguishable — `no_symbols` and
+# `extract_failed` share a return shape, and `partial` was reported as
+# `symbols`, which would have let silent symbol loss be certified complete.
+ChunkOutcome = Literal["symbols", "partial", "no_symbols", "extract_failed"]
+
+
 # graphify's dispatch covers code AND a handful of prose-ish formats
 # (markdown, yaml, json) where its "extraction" surfaces things like heading
 # structure and link graphs. Symbol chunking is the wrong shape for those —
@@ -107,10 +117,6 @@ def is_code_path(path: Path) -> bool:
     if ext in _NON_CODE_EXTS_IN_DISPATCH:
         return False
     return ext in gex._DISPATCH
-
-
-def _extractor_version() -> str:
-    return f"graphifyy/{getattr(graphify, '__version__', '0.0.0')}"
 
 
 def _parse_line(loc: str | None) -> int | None:
@@ -153,7 +159,7 @@ def chunk_code_by_symbols(
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
     min_symbol_chars: int = DEFAULT_MIN_SYMBOL_CHARS,
     max_symbol_chars: int = DEFAULT_MAX_SYMBOL_CHARS,
-) -> list[Chunk]:
+) -> tuple[list[Chunk], ChunkOutcome]:
     """Yield one chunk per AST symbol in `path` using graphifyy's extractor.
 
     - Symbols smaller than `min_symbol_chars` are merged with adjacent
@@ -165,12 +171,20 @@ def chunk_code_by_symbols(
 
     Errors from graphifyy on a single file fall back to text chunking
     rather than failing the caller.
+
+    Returns the chunks alongside a `ChunkOutcome` naming which of those paths
+    ran. `symbols` requires that every discovered symbol reached a chunk; if
+    any was dropped the outcome is `partial`, because a file that lost symbols
+    is not complete even though it produced chunks.
     """
     try:
         result = gex.extract([path], parallel=False)
     except Exception as exc:  # noqa: BLE001 — best-effort per-file extraction
         log.warning("graphifyy.extract failed on %s: %s; falling back to text", path, exc)
-        return chunk_text(source_text, target_chars=target_chars, overlap_chars=overlap_chars)
+        text_chunks = chunk_text(
+            source_text, target_chars=target_chars, overlap_chars=overlap_chars
+        )
+        return text_chunks, "extract_failed"
 
     raw_nodes = [
         n
@@ -185,7 +199,14 @@ def chunk_code_by_symbols(
     symbol_nodes = [n for n in symbol_nodes if n.get("source_location") != "L1" or _symbol_kind(n.get("label", "")) != "module"]
 
     if not symbol_nodes:
-        return chunk_text(source_text, target_chars=target_chars, overlap_chars=overlap_chars)
+        # Legitimately symbol-free — a constants module, an `__init__.py`, a
+        # top-level script. An empty file lands here too and yields no chunks
+        # at all, which is complete rather than degraded: there is nothing for
+        # a later run to redo.
+        text_chunks = chunk_text(
+            source_text, target_chars=target_chars, overlap_chars=overlap_chars
+        )
+        return text_chunks, "no_symbols"
 
     lines = source_text.splitlines(keepends=True)
     n_lines = len(lines)
@@ -242,7 +263,7 @@ def chunk_code_by_symbols(
             "symbol_kind": "merged" if len(pending_ids) > 1 else _symbol_kind(pending[0].get("label", "")),
             "start_line": pending[0]["_start_line"],
             "end_line": pending[-1]["_end_line"],
-            "extractor_version": _extractor_version(),
+            "extractor_version": graphifyy_extractor_version(),
         }
         if pending_parent:
             meta["parent_symbol_id"] = pending_parent
@@ -272,7 +293,7 @@ def chunk_code_by_symbols(
                             "symbol_kind": _symbol_kind(node.get("label", "")),
                             "start_line": node["_start_line"],
                             "end_line": node["_end_line"],
-                            "extractor_version": _extractor_version(),
+                            "extractor_version": graphifyy_extractor_version(),
                             "split": True,
                         },
                     )
@@ -301,11 +322,42 @@ def chunk_code_by_symbols(
                     "symbol_kind": _symbol_kind(node.get("label", "")),
                     "start_line": node["_start_line"],
                     "end_line": node["_end_line"],
-                    "extractor_version": _extractor_version(),
+                    "extractor_version": graphifyy_extractor_version(),
                 },
             )
         )
         out_index += 1
 
     _flush_pending()
-    return chunks
+
+    # Completeness is measured against the emitted chunks rather than tracked
+    # through the loop, so it holds for any drop path rather than only the two
+    # known ones. Identity is the symbol id, not the node: graphifyy emits the
+    # same symbol more than once for TypeScript (`EntityRow()` and `EntityRow`
+    # share an id and a location), and the duplicate is not a lost symbol.
+    # Merging is likewise a capture — `symbol_ids` records every contributor —
+    # so a file whose symbols all merge into one chunk is complete.
+    discovered_ids = {n["id"] for n in symbol_nodes if n.get("id")}
+    captured_ids: set[str] = set()
+    for chunk in chunks:
+        for symbol_id in chunk.metadata.get("symbol_ids") or [chunk.metadata.get("symbol_id")]:
+            if symbol_id:
+                captured_ids.add(symbol_id)
+
+    dropped = discovered_ids - captured_ids
+    if dropped:
+        # A symbol reached no chunk. Its text usually survives inside a
+        # neighbour's span, but its identity does not, so the file is not
+        # complete and must not be certified as such. Losing every symbol
+        # lands here too, with no chunks at all — the extreme of the same
+        # failure, and still not `extract_failed`, which never happened.
+        log.warning(
+            "graphifyy discovered %d symbols in %s but %d reached no chunk: %s",
+            len(discovered_ids),
+            path,
+            len(dropped),
+            sorted(dropped),
+        )
+        return chunks, "partial"
+
+    return chunks, "symbols"

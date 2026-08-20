@@ -1,0 +1,85 @@
+{
+  "versions": [
+    {
+      "seq": 1,
+      "label": "v1",
+      "date": "2026-07-27",
+      "file": "0001-2026-07-27.json",
+      "hash": "e3b99468306a463e234c406bbb0da0c4ad9944cbd3e743acde2d7746c0f5111b",
+      "generated_at": "2026-07-27T19:17:47+00:00",
+      "summary": {
+        "pillars": 12,
+        "changes_shipped": 14,
+        "changes_total": 16,
+        "tasks_done": 342,
+        "tasks_total": 499,
+        "known_gaps": 53
+      }
+    },
+    {
+      "seq": 2,
+      "label": "v2",
+      "date": "2026-08-06",
+      "file": "0002-2026-08-06.json",
+      "hash": "3f54803a09e40d836331920999fc242e227ac4549349f2bcbeae9c4d27bf29ca",
+      "generated_at": "2026-08-06T19:57:21+00:00",
+      "summary": {
+        "pillars": 13,
+        "changes_shipped": 14,
+        "changes_total": 17,
+        "tasks_done": 342,
+        "tasks_total": 576,
+        "known_gaps": 60
+      }
+    },
+    {
+      "seq": 3,
+      "label": "v3",
+      "date": "2026-08-07",
+      "file": "0003-2026-08-07.json",
+      "hash": "327a8a73ed5206d485ae9852b274dc805a4e707dedc45fd0f4b58d04e0acd635",
+      "generated_at": "2026-08-07T17:48:07+00:00",
+      "summary": {
+        "pillars": 13,
+        "changes_shipped": 14,
+        "changes_total": 17,
+        "tasks_done": 342,
+        "tasks_total": 582,
+        "known_gaps": 60
+      }
+    },
+    {
+      "seq": 4,
+      "label": "v4",
+      "date": "2026-08-12",
+      "file": "0004-2026-08-12.json",
+      "hash": "308cc020c75437d4cb403c7f9373221fd53a48c89c27c571e282caee7b82afe0",
+      "generated_at": "2026-08-12T19:37:35+00:00",
+      "summary": {
+        "pillars": 13,
+        "changes_shipped": 14,
+        "changes_total": 19,
+        "tasks_done": 342,
+        "tasks_total": 662,
+        "known_gaps": 60
+      }
+    },
+    {
+      "seq": 5,
+      "label": "v5",
+      "date": "2026-08-20",
+      "file": "0005-2026-08-20.json",
+      "hash": "4780254836f17ceb072bf4e14d10a8724f7c5746cde4d8392d1cc1399cfaafed",
+      "generated_at": "2026-08-20T13:24:18+00:00",
+      "summary": {
+        "pillars": 13,
+        "changes_shipped": 14,
+        "changes_total": 19,
+        "tasks_done": 342,
+        "tasks_total": 669,
+        "known_gaps": 60
+      }
+    }
+  ],
+  "latest": 5
+}

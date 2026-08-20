@@ -14,6 +14,7 @@ from opencg_ingestion.graph_writer import (
     _RELATION_MAP,
     write_code_graph,
 )
+from opencg_ingestion.graphifyy_version import graphifyy_extractor_version
 from opencg_pipeline.storage.catalog import CatalogStore
 
 
@@ -102,6 +103,36 @@ async def test_single_node_writes_one_concept():
     # First insert is the concept; transaction is bracketed.
     assert conn.tx_started and conn.tx_finished
     assert any("INSERT INTO opencg.concept" in s for s, _ in conn.statements)
+
+
+@pytest.mark.asyncio
+async def test_persisted_rows_record_the_installed_graphifyy_version():
+    """The knowledge-graph spec requires `graphifyy/{version}` on every
+    persisted row. `graphify` has no `__version__`, so the `getattr` this
+    replaced wrote `graphifyy/0.0.0` to all of them."""
+    conn = _Conn()
+    catalog = _store_with(conn)
+    result = {
+        "nodes": [
+            {"id": "a", "label": "A()", "file_type": "code", "_origin": "ast"},
+            {"id": "b", "label": "B()", "file_type": "code", "_origin": "ast"},
+        ],
+        "edges": [{"source": "a", "target": "b", "relation": "calls", "confidence": "EXTRACTED"}],
+    }
+    await write_code_graph(
+        catalog=catalog,
+        tenant="t",
+        file_entity_id="file-uuid",
+        graphify_result=result,
+    )
+
+    expected = graphifyy_extractor_version()
+    assert expected != "graphifyy/0.0.0"
+    for table in ("concept", "relationship_edge", "relationship_evidence"):
+        rows = [args for sql, args in conn.statements if f"INSERT INTO opencg.{table}" in sql]
+        assert rows, table
+        for args in rows:
+            assert expected in args, (table, args)
 
 
 @pytest.mark.asyncio

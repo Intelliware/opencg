@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-08-06
+goal: The knowledge graph gains a schema — a hierarchy of concept classes and
+  domain/range constraints on relationship types — so extraction is bounded,
+  review has leverage, and traversal can be narrowed by kind.

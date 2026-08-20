@@ -29,10 +29,10 @@ import unicodedata
 import uuid
 from typing import Any
 
-import graphify
-
 from opencg_pipeline.graph.age import reflect_concept, reflect_edge
 from opencg_pipeline.storage.catalog import CatalogStore
+
+from opencg_ingestion.graphifyy_version import graphifyy_extractor_version
 
 log = logging.getLogger(__name__)
 
@@ -71,10 +71,6 @@ def _concept_uuid(tenant: str, dedupe_key: str) -> str:
 
 def _edge_uuid(tenant: str, from_id: str, etype: str, to_id: str) -> str:
     return str(uuid.uuid5(_EDGE_NS, f"{tenant}:{from_id}:{etype}:{to_id}"))
-
-
-def _extractor_version() -> str:
-    return f"graphifyy/{getattr(graphify, '__version__', '0.0.0')}"
 
 
 def _kind_from_label(label: str | None) -> str | None:
@@ -148,7 +144,7 @@ async def write_code_graph(
                     None,
                     "confirmed",
                     1.0,
-                    _extractor_version(),
+                    graphifyy_extractor_version(),
                     node["id"],
                     kind,
                     file_entity_id,
@@ -193,7 +189,7 @@ async def write_code_graph(
                         target_dedupe,
                         "confirmed",
                         1.0,
-                        _extractor_version(),
+                        graphifyy_extractor_version(),
                         file_entity_id,
                     )
                     await reflect_concept(
@@ -234,7 +230,7 @@ async def write_code_graph(
                     to_node[0],
                     state,
                     conf_value,
-                    _extractor_version(),
+                    graphifyy_extractor_version(),
                 )
                 await reflect_edge(
                     conn,
@@ -255,7 +251,7 @@ async def write_code_graph(
                     edge_id,
                     file_entity_id,
                     edge.get("source_location"),
-                    _extractor_version(),
+                    graphifyy_extractor_version(),
                     conf_value,
                 )
                 edges_written += 1

@@ -24,9 +24,15 @@ from opencg_pipeline.storage.vector import VectorIndex
 from opencg_shared import openCGConfig, setup_otel
 from opentelemetry import trace
 
-from opencg_ingestion.chunking import chunk_code_by_symbols, chunk_text, is_code_path
+from opencg_ingestion.chunking import (
+    ChunkOutcome,
+    chunk_code_by_symbols,
+    chunk_text,
+    is_code_path,
+)
 from opencg_ingestion.connectors.git import GitDocument
 from opencg_ingestion.graph_writer import write_code_graph
+from opencg_ingestion.graphifyy_version import graphifyy_extractor_version
 from opencg_ingestion.reextract import current_extractor_version
 from opencg_ingestion.text_graph_writer import load_vocabulary, write_text_graph
 
@@ -121,7 +127,7 @@ async def ingest_documents(
                 # Symbol-chunk + write the code graph. Failures fall back to
                 # paragraph chunking and skip the graph for that file — the
                 # ingest does not abort.
-                chunks, code_graph = await _extract_code(tracer, doc, path)
+                chunks, code_graph, _chunk_outcome = await _extract_code(tracer, doc, path)
             else:
                 chunks = chunk_text(doc.body)
                 code_graph = None
@@ -283,21 +289,25 @@ def _materialised_code_path(doc: GitDocument, path: Path) -> Iterator[Path]:
 
 async def _extract_code(
     tracer: trace.Tracer, doc: GitDocument, path: Path
-) -> tuple[list, dict | None]:
+) -> tuple[list, dict | None, ChunkOutcome]:
     """Run the symbol chunker AND capture the raw graphify result.
 
     Wrapped in an OTel span (`pipeline.graph_extract_code`) with zero token
     counts so observability tooling sees the deterministic extractor.
     Failures fall back to text chunking for embedding and skip the graph.
+
+    The returned `ChunkOutcome` is the only honest signal of degradation.
+    The extract below and the one inside `chunk_code_by_symbols` are separate
+    calls, so the inner one can fail while `graphify_result` is non-null —
+    a caller inferring degradation from a null code graph would miss it.
     """
-    import graphify
     import graphify.extract as gex
 
     start = time.perf_counter()
     with tracer.start_as_current_span("pipeline.graph_extract_code") as span:
         span.set_attribute("model", "graphifyy")
         span.set_attribute("provider", "graphifyy")
-        span.set_attribute("extractor_version", f"graphifyy/{getattr(graphify, '__version__', '0.0.0')}")
+        span.set_attribute("extractor_version", graphifyy_extractor_version())
         span.set_attribute("tokens_in", 0)
         span.set_attribute("tokens_out", 0)
         try:
@@ -306,15 +316,16 @@ async def _extract_code(
             # down when the context exits — including on the failure path below).
             with _materialised_code_path(doc, path) as use_path:
                 graphify_result = gex.extract([use_path], parallel=False)
-                chunks = chunk_code_by_symbols(use_path, doc.body)
+                chunks, outcome = chunk_code_by_symbols(use_path, doc.body)
                 span.set_attribute("symbols", len(graphify_result.get("nodes", [])))
                 span.set_attribute("chunks", len(chunks))
+                span.set_attribute("chunk_outcome", outcome)
         except Exception as exc:
             log.warning("graphifyy failed for %s: %s; using text chunker", doc.source_uri, exc)
             span.record_exception(exc)
-            return chunk_text(doc.body), None
+            return chunk_text(doc.body), None, "extract_failed"
         span.set_attribute("latency_ms", int((time.perf_counter() - start) * 1000))
-        return chunks, graphify_result
+        return chunks, graphify_result, outcome
 
 
 _CHUNK_NS = uuid.UUID("6e3a4d1e-0000-0000-0000-000000000002")

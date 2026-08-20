@@ -29,5 +29,5 @@ ignore = ["E501"]   # line length handled by formatter
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["services", "packages"]
+testpaths = ["services", "packages", "tools"]
 addopts = "-ra -q"

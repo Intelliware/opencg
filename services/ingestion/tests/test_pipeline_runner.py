@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 from opencg_shared import openCGConfig
@@ -235,3 +236,74 @@ async def test_chunk_limit_stops_downstream_work(monkeypatch):
     assert len(_Catalog.inserted) == 3
     assert len(_Vector.upserts) == 2
     assert len(extract_calls) == 2
+
+
+# --- the chunker outcome reaches the runner --------------------------------
+
+
+_CODE_SAMPLE = '''def parse_registry(text):
+    """Pull every bare word out of the blob and hand them back."""
+    words = []
+    for token in text.split():
+        words.append(token.strip())
+    return words
+
+
+def title_of(path):
+    """The last path segment, minus any extension."""
+    tail = path.rsplit("/", 1)[-1]
+    return tail.rsplit(".", 1)[0]
+'''
+
+
+def _code_doc() -> GitDocument:
+    return GitDocument(
+        entity_id="parent",
+        title="pkg/sample.py",
+        body=_CODE_SAMPLE,
+        source="git",
+        source_uri="git://repo/pkg/sample.py",
+        source_revision="abc",
+        content_hash="hash",
+        metadata={"path": "pkg/sample.py", "ext": ".py"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_code_reports_symbols_on_the_happy_path():
+    chunks, graph, outcome = await pipeline_runner._extract_code(
+        _Tracer(), _code_doc(), Path("pkg/sample.py")
+    )
+    assert graph is not None
+    assert chunks
+    assert outcome == "symbols"
+
+
+@pytest.mark.asyncio
+async def test_inner_extract_failure_is_visible_despite_a_non_null_graph(monkeypatch):
+    """`_extract_code` calls `graphify.extract` and then `chunk_code_by_symbols`
+    calls it again, independently. When only the second call fails, the code
+    graph is still non-null — so a caller checking `code_graph is None` would
+    conclude the file was fine. The outcome is the only signal that works.
+    """
+    import graphify.extract as gex
+
+    real_extract = gex.extract
+    calls: list[int] = []
+
+    def fails_on_the_inner_call(paths, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return real_extract(paths, **kwargs)
+        raise RuntimeError("inner extractor exploded")
+
+    monkeypatch.setattr(gex, "extract", fails_on_the_inner_call)
+
+    chunks, graph, outcome = await pipeline_runner._extract_code(
+        _Tracer(), _code_doc(), Path("pkg/sample.py")
+    )
+
+    assert len(calls) == 2  # the runner's own call, then the chunker's
+    assert graph is not None
+    assert outcome == "extract_failed"
+    assert all(c.metadata.get("symbol_id") is None for c in chunks)

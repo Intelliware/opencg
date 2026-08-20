@@ -31,6 +31,7 @@ The **thin MVP** — the first end-to-end working slice — is implemented and r
 
 **In flight** ([`openspec list`](./openspec/changes/)):
 
+- **[`add-ontology-layer`](./openspec/changes/add-ontology-layer/)** — an **ontology** over the knowledge graph: a hierarchy of concept classes (`Function`, `Module`, `Service`, `Topic`, …) plus domain/range constraints saying which relationship types may run between which kinds, so extraction is bounded, review gains bulk leverage, and traversal can be filtered by kind. Constraints are advisory — a violating edge is recorded and queued for review, never rejected. _Specced and validated; awaiting approval to implement._
 - **[`add-foundation`](./openspec/changes/add-foundation/)** — the **full v0 vision** spanning 12 capabilities (intent classifier, rerank + compress, OPA enforcement, additional connectors, enrichment workers, full admin UI, OTel/Tempo/Grafana stack, …). Each deferred capability ships as its own follow-up change that MODIFIES the requirements earlier changes set.
 - **`stabilize-full-smoke`** — deterministic, bounded end-to-end smoke (local fixture + chat stub + OTel verification under a five-minute deadline). _Complete; pending archive._
 

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>openCG — Architecture Explainer</title>
+<meta name="description" content="How Open Context Graph works, pillar by pillar, with the spec history behind each one.">
+<style>/*{{CSS}}*/</style>
+</head>
+<body>
+<div id="app" class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">CG</div>
+      <div class="brand-text">
+        <strong>openCG</strong>
+        <span>Architecture Explainer</span>
+      </div>
+    </div>
+    <nav id="nav" class="nav" aria-label="Sections"></nav>
+    <div class="sidebar-foot">
+      <span id="foot-version"></span>
+      <span id="foot-generated"></span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menu-btn" aria-label="Toggle navigation">☰</button>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="Search pillars, steps, changes, gaps…" autocomplete="off" spellcheck="false">
+        <div id="search-results" class="search-results" hidden></div>
+      </div>
+      <div class="topbar-right">
+        <label class="picker">
+          <span>Version</span>
+          <select id="version-select" aria-label="Version"></select>
+        </label>
+        <label class="picker">
+          <span>Compare with</span>
+          <select id="compare-select" aria-label="Compare with"></select>
+        </label>
+        <button class="icon-btn" id="theme-btn" aria-label="Toggle theme" title="Toggle light / dark">◐</button>
+      </div>
+    </header>
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<script id="explainer-data" type="application/json">/*{{DATA}}*/</script>
+<script>/*{{JS}}*/</script>
+</body>
+</html>

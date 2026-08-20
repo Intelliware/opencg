@@ -115,7 +115,7 @@ def test_materialised_path_sanitises_traversal():
 @pytest.mark.asyncio
 async def test_extract_code_names_reflect_real_path():
     doc = _doc("evals/checks.py")
-    chunks, graph = await pipeline_runner._extract_code(
+    chunks, graph, _ = await pipeline_runner._extract_code(
         _Tracer(), doc, Path("evals/checks.py")
     )
     assert graph is not None
@@ -136,8 +136,8 @@ async def test_extract_code_names_reflect_real_path():
 @pytest.mark.asyncio
 async def test_extract_code_symbol_ids_are_stable():
     doc = _doc("evals/checks.py")
-    chunks_a, _ = await pipeline_runner._extract_code(_Tracer(), doc, Path("evals/checks.py"))
-    chunks_b, _ = await pipeline_runner._extract_code(_Tracer(), doc, Path("evals/checks.py"))
+    chunks_a, _, _ = await pipeline_runner._extract_code(_Tracer(), doc, Path("evals/checks.py"))
+    chunks_b, _, _ = await pipeline_runner._extract_code(_Tracer(), doc, Path("evals/checks.py"))
 
     ids_a = [c.metadata.get("symbol_id") for c in chunks_a]
     ids_b = [c.metadata.get("symbol_id") for c in chunks_b]
