@@ -1,7 +1,10 @@
 SHELL := /bin/bash
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
+# Pinned so local runs and CI validate with the same OpenSpec and gitleaks.
+OPENSPEC := npx -y @fission-ai/openspec@1.4.1
+GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1
 
-.PHONY: help bootstrap up up-d down down-v logs ps test test-mcp test-shared test-pipeline test-ingestion test-ui lint typecheck format smoke smoke-cloud e2e e2e-ui ingest-git
+.PHONY: help bootstrap up up-d down down-v logs ps test test-mcp test-shared test-pipeline test-ingestion test-ui lint typecheck format smoke smoke-cloud e2e e2e-ui ingest-git storybook check-agent-guides openspec-validate secrets-scan ci ci-static ci-stack
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -75,3 +78,24 @@ e2e: ## Admin UI end-to-end suite (Playwright); starts the stack first if needed
 e2e-ui: ## Playwright UI mode; leaves the e2e overlay applied between runs
 	$(COMPOSE) --profile dev up -d --wait --no-recreate
 	E2E_KEEP_OVERLAY=1 pnpm --filter @opencg/admin-ui e2e:ui
+
+storybook: ## Build the admin UI Storybook (static output is gitignored)
+	pnpm --filter @opencg/admin-ui build-storybook
+
+check-agent-guides: ## Fail if the AGENTS.md / CLAUDE.md / .cursor/rules/opencg.mdc bodies differ
+	./scripts/check-agent-guides.sh
+
+openspec-validate: ## Strictly validate every OpenSpec change and spec
+	$(OPENSPEC) validate --all --strict
+
+secrets-scan: ## Scan the full git history for secrets (gitleaks, via Docker)
+	docker run --rm -v "$(CURDIR):/repo" $(GITLEAKS_IMAGE) detect --source /repo --redact --no-banner
+
+ci-static: lint typecheck test storybook check-agent-guides openspec-validate secrets-scan ## CI's static job, locally
+
+ci-stack: ## CI's stack job, locally: start the stack, then smoke and e2e (needs .env)
+	$(COMPOSE) --profile dev up -d --wait
+	$(MAKE) smoke
+	$(MAKE) e2e
+
+ci: ci-static ci-stack ## The whole CI gate, locally

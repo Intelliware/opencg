@@ -64,14 +64,16 @@
 
 ## 5. Continuous integration
 
-- [ ] 5.1 `.github/workflows/ci.yml` `static` job: pnpm and uv caches, lint, typecheck, unit tests, Storybook build, and gitleaks on the pushed commits
-- [ ] 5.2 `stack` job: compose build with layer cache, Ollama volume cache, `make up-d`, `make smoke`, `make e2e`; upload compose logs and the Playwright report on failure
-- [ ] 5.3 Nightly schedule and `workflow_dispatch` for the `stack` job
-- [ ] 5.4 Agent-guide sync check: fail if the bodies of `AGENTS.md`, `CLAUDE.md` and `.cursor/rules/opencg.mdc` differ
-- [ ] 5.5 Run `openspec validate --all --strict` in CI
-- [ ] 5.6 `.github/dependabot.yml` for npm, uv/pip, docker and github-actions, plus a `dependency-review` job on PRs that fails on critical or high advisories
+- [x] 5.1 `.github/workflows/ci.yml` `static` job: pnpm and uv caches, lint, typecheck, unit tests, Storybook build, and gitleaks on the pushed commits
+- [x] 5.2 `stack` job: compose build with layer cache, Ollama volume cache, `make up-d`, `make smoke`, `make e2e`; upload compose logs and the Playwright report on failure
+- [x] 5.3 Nightly schedule and `workflow_dispatch` for the `stack` job
+- [x] 5.4 Agent-guide sync check: fail if the bodies of `AGENTS.md`, `CLAUDE.md` and `.cursor/rules/opencg.mdc` differ
+- [x] 5.5 Run `openspec validate --all --strict` in CI
+- [x] 5.6 `.github/dependabot.yml` for npm, uv/pip, docker and github-actions, plus a `dependency-review` job on PRs that fails on critical or high advisories
 - [ ] 5.7 Enable branch protection on `main` with `static` (and `stack`, per 0.2) as required checks (GitHub settings, done by Edward)
-- [ ] 5.8 Add `make ci` to run the whole gate locally
+- [x] 5.8 Add `make ci` to run the whole gate locally (`ci-static` + `ci-stack`; both pass locally, in 18 s and 65 s)
+- [x] 5.9 Add a root `.dockerignore`: build contexts were about 1.7 GB, and included `.env` and local admin-ui build/test state (found during phase 5)
+- [ ] 5.10 First green run of `static`, `dependency-review` and `stack` on GitHub (draft PR into `main`)
 
 ## 6. Community files
 

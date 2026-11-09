@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *" # nightly full-stack run
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  DO_NOT_TRACK: "1"
+
+jobs:
+  static:
+    name: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks scans the full history
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies from the lockfiles
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --all-packages --frozen
+
+      - run: make lint
+      - run: make typecheck
+      - run: make test
+      - run: make storybook
+      - run: make check-agent-guides
+      - run: make openspec-validate
+      - run: make secrets-scan
+
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  stack:
+    name: stack
+    needs: static
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OLLAMA_CACHE_DIR: /tmp/ollama-models # outside the repo, so not in any build context
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Playwright browser cache key
+        id: playwright
+        run: echo "version=$(pnpm --filter @opencg/admin-ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @opencg/admin-ui exec playwright install --with-deps chromium
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @opencg/admin-ui exec playwright install-deps chromium
+
+      - name: Create .env from the example
+        run: cp .env.example .env
+
+      - uses: docker/setup-buildx-action@v4
+      - name: Build images (layer cache per image)
+        uses: docker/bake-action@v7
+        with:
+          # Bake resolves env_file and build contexts from its working directory,
+          # so run it where the compose file's ../../ paths make sense.
+          source: ./infra/compose
+          files: docker-compose.yml
+          allow: fs.read=../..
+          targets: postgres,pipeline,ingestion,mcp-server,admin-ui
+          load: true
+          set: |
+            postgres.cache-from=type=gha,scope=postgres
+            postgres.cache-to=type=gha,scope=postgres,mode=max
+            pipeline.cache-from=type=gha,scope=pipeline
+            pipeline.cache-to=type=gha,scope=pipeline,mode=max
+            ingestion.cache-from=type=gha,scope=ingestion
+            ingestion.cache-to=type=gha,scope=ingestion,mode=max
+            mcp-server.cache-from=type=gha,scope=mcp-server
+            mcp-server.cache-to=type=gha,scope=mcp-server,mode=max
+            admin-ui.cache-from=type=gha,scope=admin-ui
+            admin-ui.cache-to=type=gha,scope=admin-ui,mode=max
+
+      # Only models/ is cached: /root/.ollama also holds the instance's identity key.
+      - name: Ollama model cache key
+        id: ollama
+        run: |
+          model="$(sed -n 's/^OPENCG__OLLAMA__EMBEDDING_MODEL=//p' .env.example)"
+          tag="$(sed -n 's|.*image: ollama/ollama:||p' infra/compose/docker-compose.yml)"
+          echo "key=ollama-models-${model}-${tag}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: ollama-cache
+        with:
+          path: ${{ env.OLLAMA_CACHE_DIR }}
+          key: ${{ steps.ollama.outputs.key }}
+      - name: Seed the Ollama volume from the cache
+        if: steps.ollama-cache.outputs.cache-hit == 'true'
+        run: |
+          docker volume create \
+            --label com.docker.compose.project=opencg \
+            --label com.docker.compose.volume=ollama-data \
+            opencg_ollama-data
+          docker run --rm -v opencg_ollama-data:/root/.ollama -v "$OLLAMA_CACHE_DIR:/cache:ro" \
+            alpine:3 sh -c 'mkdir -p /root/.ollama/models && cp -a /cache/. /root/.ollama/models/'
+
+      - name: Start the stack and wait for health
+        run: |
+          make up-d
+          docker compose -f infra/compose/docker-compose.yml --env-file .env --profile dev \
+            up -d --wait --wait-timeout 900
+
+      - name: Save the Ollama models to the cache
+        if: steps.ollama-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$OLLAMA_CACHE_DIR"
+          docker run --rm -v opencg_ollama-data:/root/.ollama:ro -v "$OLLAMA_CACHE_DIR:/cache" \
+            alpine:3 sh -c 'cp -a /root/.ollama/models/. /cache/ && chmod -R a+rX /cache'
+      - uses: actions/cache/save@v6
+        if: steps.ollama-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.OLLAMA_CACHE_DIR }}
+          key: ${{ steps.ollama.outputs.key }}
+
+      - run: make smoke
+      - run: make e2e
+
+      - name: Collect compose logs
+        if: failure()
+        run: |
+          docker compose -f infra/compose/docker-compose.yml \
+            -f infra/compose/docker-compose.smoke.yml -f infra/compose/docker-compose.e2e.yml \
+            --env-file .env --profile dev logs --no-color --timestamps > compose-logs.txt 2>&1 || true
+          docker compose -f infra/compose/docker-compose.yml --env-file .env --profile dev ps -a >> compose-logs.txt 2>&1 || true
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: stack-failure-evidence
+          path: |
+            compose-logs.txt
+            services/admin-ui/playwright-report/
+            services/admin-ui/test-results/
+          retention-days: 14
+          if-no-files-found: ignore

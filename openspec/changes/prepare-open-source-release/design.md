@@ -85,6 +85,15 @@ The Python images run as uid 10001 (`opencg`) and set `UV_FROZEN=1` / `UV_NO_SYN
   - **`stack`** (needs `static`, on PRs to `main` + nightly + manual dispatch): `make up-d`, wait for health, `make smoke`, `make e2e`. Uploads the Playwright report and compose logs on failure. The Ollama model volume is cached by embedding-model name.
 - `dependabot.yml`: npm, pip/uv, github-actions and docker ecosystems, weekly.
 
+Implementation notes (phase 5):
+- **Triggers.** `push` runs only for `main`, and every PR runs `static`, so a PR branch isn't checked twice. `stack` runs on PRs into `main`, nightly at 06:17 UTC, and on manual dispatch.
+- **gitleaks** runs from the pinned `zricethezav/gitleaks` image over the full history (`make secrets-scan`), not through `gitleaks-action`, which needs a paid licence on organisation accounts. The history is small, so a full scan takes seconds.
+- **OpenSpec** runs as `npx @fission-ai/openspec@1.4.1`, pinned in the Makefile to the version used locally, so it adds nothing to the lockfile.
+- **Image builds** use `docker/bake-action` with one GitHub Actions cache scope per image. Bake resolves `env_file` and build contexts from its working directory, so it runs from `infra/compose` with `allow: fs.read=../..`.
+- **Ollama models** are cached per model name and Ollama image tag. CI pre-creates `opencg_ollama-data` with compose's project and volume labels, then copies only `models/` in from the cache. `/root/.ollama` also holds the instance's identity key, which stays out of the cache. Compose adopts the volume without a warning, and the entrypoint skips the pull.
+- **`make ci`** = `ci-static` (the static job) + `ci-stack` (start the stack and wait for health, then smoke and e2e), so a contributor can run the whole gate locally.
+- **A root `.dockerignore` (found during phase 5).** Every service image builds from the repo root, and without it each build sent about 1.7 GB (`node_modules`, `.venv`) plus `.env` to the daemon. `COPY services/admin-ui` also pulled local `.next`, test output and the e2e session file into the build stage.
+
 ### D4. Safe network defaults
 
 Every published compose port becomes `"127.0.0.1:${OPENCG__<SVC>__HOST_PORT:-<default>}:<container>"`. Postgres user, password and db come from `.env` (`OPENCG__POSTGRES__USER` and so on, defaulting to the current values for compatibility), and the pipeline URL is derived from them. Operators who need LAN exposure override the bind address on purpose (`OPENCG__BIND_ADDRESS`).
