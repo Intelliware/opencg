@@ -103,6 +103,9 @@ export function GraphExplorer({
   // Fetch the neighbourhood whenever the focus / depth / candidate filter changes.
   useEffect(() => {
     if (!focus) return;
+    // Sync before fetching: a replaceState that lands after a slow traverse can
+    // override a sidebar navigation the user started in the meantime.
+    syncUrl(focus, depth, includeCandidates);
     let active = true;
     setLoading(true);
     setError(null);
@@ -110,7 +113,6 @@ export function GraphExplorer({
       .then((traverse) => {
         if (!active) return;
         setData(traverse);
-        syncUrl(focus, depth, includeCandidates);
       })
       .catch((e: unknown) => active && setError(e instanceof Error ? e.message : "traverse failed"))
       .finally(() => active && setLoading(false));
