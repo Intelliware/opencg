@@ -59,3 +59,4 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+services/admin-ui/e2e/.auth/

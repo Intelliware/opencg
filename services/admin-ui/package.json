@@ -14,7 +14,9 @@
     "storybook": "storybook dev -p 6006",
     "prebuild-storybook": "pnpm --filter @opencg/shared build",
     "build-storybook": "storybook build",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p e2e/tsconfig.json",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@opencg/shared": "workspace:*",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@headlessui/tailwindcss": "^0.2.1",
+    "@playwright/test": "^1.65.0",
     "@storybook/addon-essentials": "^8.6.19",
     "@storybook/react": "^8.6.19",
     "@storybook/react-vite": "^8.6.19",

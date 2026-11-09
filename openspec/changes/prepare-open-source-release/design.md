@@ -52,6 +52,16 @@ The suite seeds data with a global setup that reuses the smoke runner's fixture 
 
 The suite runs on Chromium in CI. Firefox and WebKit can be enabled locally through a project flag.
 
+### D1a. E2E wiring details (added at the start of phase 4)
+
+Reading the UI and pipeline before writing the suite turned up five constraints:
+
+- **Fixture helpers become a sourced library.** `tests/smoke/lib.sh` holds `cfg`, the compose command and the fixture functions (create, ingest, remove). `run.sh` sources it, and `tests/smoke/fixture.sh` wraps it as a CLI that Playwright's global setup calls. Behaviour of `make smoke` is unchanged.
+- **A separate e2e overlay, `infra/compose/docker-compose.e2e.yml`, applied on top of the smoke overlay.** A "Run now" from the UI ingests through the ingestion service's own chat settings, which point at Ollama Cloud. The spec forbids the suite calling an external provider, so the e2e overlay points the ingestion container's chat provider at `smoke-chat`. It cannot go in the smoke overlay, because `make smoke-cloud` uses that overlay and needs the real provider. The cost is that switching between `make smoke` and `make e2e` recreates the ingestion container, which takes a few seconds.
+- **A second, always-gated admin UI instance.** The e2e overlay adds `admin-ui-gated`: the same image with a fixed test-only password, published on loopback at `${OPENCG__ADMIN_UI_GATED__HOST_PORT:-3001}`. That lets `auth.spec.ts` cover both gate modes in one run without restarting the main instance. If the main instance is itself gated (the password is set in `.env`), global setup signs in once and shares the session. The gate-off banner test is then skipped with a reason.
+- **Two candidate relationships per run.** The chat stub returns one relationship today, and the graph scenario needs one to promote and one to reject. The stub adds a second, lower-confidence relationship between the same two run-scoped concepts. The smoke test still promotes the highest-confidence one, so it is unaffected. The UI has no separate "reject" action for an edge, so "reject" in the spec means the **Delete** action, which tombstones the edge.
+- **Run scoping by ID, not by filter.** The entity list can only filter by connector `source`, not by `source_uri` prefix. The specs therefore look up current-run IDs through the pipeline API and locate UI rows by their link (`/entities/<id>`, `/queries/<id>`), never by position or title. The UI's "Run now" test ingests its own second fixture copy, so it never re-ingests, and so never disturbs, the data the other specs assert on.
+
 ### D2. Dev tooling in a root uv dependency group
 
 Add `[dependency-groups] dev = [pytest, pytest-asyncio, respx, ruff]` at the workspace root. uv installs the default group on `uv sync`, so a plain sync gets the test tooling. The per-service `test` extras stay for the Docker images that use them, or are removed if nothing does (verify during implementation).

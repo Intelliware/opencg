@@ -1,14 +1,15 @@
 SHELL := /bin/bash
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help bootstrap up up-d down down-v logs ps test test-mcp test-shared test-pipeline test-ingestion test-ui lint typecheck format smoke smoke-cloud ingest-git
+.PHONY: help bootstrap up up-d down down-v logs ps test test-mcp test-shared test-pipeline test-ingestion test-ui lint typecheck format smoke smoke-cloud e2e e2e-ui ingest-git
 
 help: ## Show this help
-	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-bootstrap: ## Install JS + Python deps (incl. dev tools: pytest, ruff) locally
+bootstrap: ## Install JS + Python deps (incl. dev tools: pytest, ruff, Playwright Chromium) locally
 	pnpm install --frozen-lockfile
 	uv sync --all-packages --frozen
+	pnpm --filter @opencg/admin-ui exec playwright install chromium
 
 up: ## Start the dev stack (foreground)
 	$(COMPOSE) --profile dev up
@@ -66,3 +67,11 @@ smoke: ## End-to-end smoke test (applies the smoke overlay itself)
 
 smoke-cloud: ## Bounded real-provider canary (requires chat API key)
 	SMOKE_CHAT_MODE=cloud ./tests/smoke/run.sh
+
+e2e: ## Admin UI end-to-end suite (Playwright); starts the stack first if needed
+	$(COMPOSE) --profile dev up -d --wait --no-recreate
+	pnpm --filter @opencg/admin-ui e2e
+
+e2e-ui: ## Playwright UI mode; leaves the e2e overlay applied between runs
+	$(COMPOSE) --profile dev up -d --wait --no-recreate
+	E2E_KEEP_OVERLAY=1 pnpm --filter @opencg/admin-ui e2e:ui

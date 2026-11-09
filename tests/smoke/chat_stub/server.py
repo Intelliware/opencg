@@ -38,7 +38,16 @@ def build_content(user_text: str) -> str:
                     "to": context,
                     "evidence_span": "The openCG catalogue is related to context windows.",
                     "confidence": 0.99,
-                }
+                },
+                # A second candidate, so the e2e suite can promote one and
+                # reject the other; smoke promotes the higher-confidence one.
+                {
+                    "from": context,
+                    "relation": "derived_from",
+                    "to": catalogue,
+                    "evidence_span": "retrieval supplies only the evidence needed",
+                    "confidence": 0.9,
+                },
             ],
         }
     )
