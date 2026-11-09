@@ -22,7 +22,7 @@ export default async function VectorsPage() {
         </span>
       </header>
       <p className="mt-0 text-muted-foreground">
-        Search the embedded catalogue. Every request reuses the pipeline's
+        Search the embedded catalogue. Every request reuses the pipeline&apos;s
         embeddings client; vector search is admin-only and does not write an
         audit row.
       </p>

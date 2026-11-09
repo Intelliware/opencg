@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 import respx
 from httpx import Response
@@ -90,7 +91,7 @@ async def test_chat_propagates_http_errors():
     )
     client = OllamaChat(base_url="https://ollama.com", model="m", api_key="bad")
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.HTTPStatusError):
             await client.chat(system=None, user="hi")
     finally:
         await client.close()

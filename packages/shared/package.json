@@ -11,12 +11,15 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node --test ./dist/*.test.js 2>/dev/null || echo 'no tests'",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "format": "echo 'no formatter'"
+    "format": "echo 'no formatter'",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

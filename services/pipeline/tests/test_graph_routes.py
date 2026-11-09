@@ -252,6 +252,17 @@ def test_traverse_enforces_caps():
     )
 
 
+def test_transitions_accept_missing_body():
+    client, graph = _client()
+    response = client.post("/graph/concepts/c1/promote")
+    assert response.status_code == 200
+    assert graph.last[1]["reason"] is None
+
+    response = client.post("/graph/edges/e1/demote")
+    assert response.status_code == 200
+    assert graph.last[1]["reason"] is None
+
+
 def test_concept_state_transitions_and_patch():
     client, graph = _client()
     response = client.post("/graph/concepts/c1/promote", json={"reason": "reviewed"})

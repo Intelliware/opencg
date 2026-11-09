@@ -9,7 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _lock = threading.Lock()
-_requests = 0
+_stats = {"requests": 0}
 
 
 def build_content(user_text: str) -> str:
@@ -59,13 +59,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/stats":
             with _lock:
-                count = _requests
+                count = _stats["requests"]
             self._json(200, {"chat_requests": count})
             return
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
-        global _requests
         if self.path != "/api/chat":
             self._json(404, {"error": "not found"})
             return
@@ -81,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
             "",
         )
         with _lock:
-            _requests += 1
+            _stats["requests"] += 1
         self._json(
             200,
             {

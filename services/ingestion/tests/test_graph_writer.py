@@ -227,8 +227,8 @@ async def test_relations_map_to_vocabulary():
     edge_args = [a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s]
     types = [args[2] for args in edge_args]
     # Each mapping verified per the _RELATION_MAP table.
-    expected_types = {"defined_in", "imports", "calls", "uses"}
-    assert set(types) == expected_types
+    expected_types = ["defined_in", "defined_in", "imports", "imports", "calls", "uses"]
+    assert sorted(types) == sorted(expected_types)
 
 
 @pytest.mark.asyncio

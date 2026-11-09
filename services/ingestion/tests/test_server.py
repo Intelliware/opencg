@@ -90,6 +90,7 @@ def test_run_git_failure_records_error(make_client):
     listed = client.get("/runs/recent").json()
     while listed[0]["status"] not in ("succeeded", "failed") and time.monotonic() < deadline:
         listed = client.get("/runs/recent").json()
+    assert listed[0]["run_id"] == run_id
     assert listed[0]["status"] == "failed"
     assert "clone refused" in (listed[0]["error"] or "")
 

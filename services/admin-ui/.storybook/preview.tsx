@@ -2,7 +2,9 @@ import type { Preview } from "@storybook/react";
 import React, { useEffect } from "react";
 import "../src/app/globals.css";
 
-const withTheme = (Story: React.ComponentType, context: { globals: { theme?: string } }) => {
+// Capitalised: Storybook renders decorators inside a React render, so hooks
+// are valid here; the name tells eslint-plugin-react-hooks the same.
+const WithTheme = (Story: React.ComponentType, context: { globals: { theme?: string } }) => {
   const theme = context.globals.theme ?? "light";
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -30,7 +32,7 @@ const preview: Preview = {
     },
   },
   initialGlobals: { theme: "light" },
-  decorators: [withTheme],
+  decorators: [WithTheme],
 };
 
 export default preview;

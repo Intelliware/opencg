@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 export const metadata = {
   title: "openCG — Admin",
   description: "Inspect queries, audits, and provider health.",
+  icons: { icon: "/opencg-logo.png" },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

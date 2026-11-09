@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 from opencg_ingestion import pipeline_runner
@@ -11,7 +12,7 @@ from opencg_shared import openCGConfig
 
 
 class _Catalog:
-    inserted: list[str] = []
+    inserted: ClassVar[list[str]] = []
 
     def __init__(self, dsn: str) -> None:
         self.inserted = []
@@ -28,7 +29,7 @@ class _Catalog:
 
 
 class _Vector:
-    upserts: list[str] = []
+    upserts: ClassVar[list[str]] = []
 
     def __init__(self, **kwargs) -> None:
         self.upserts = []

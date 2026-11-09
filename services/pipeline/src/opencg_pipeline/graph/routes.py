@@ -145,7 +145,7 @@ async def traverse(
 
 
 async def _transition_concept(
-    request: Request, concept_id: str, state: str, body: ReasonBody
+    request: Request, concept_id: str, state: str, body: ReasonBody | None
 ) -> dict:
     cfg = request.app.state.cfg
     row = await request.app.state.graph.transition_concept(
@@ -153,7 +153,7 @@ async def _transition_concept(
         concept_id=concept_id,
         state=state,
         actor=cfg.identity.principal,
-        reason=body.reason,
+        reason=body.reason if body else None,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="concept not found")
@@ -162,21 +162,19 @@ async def _transition_concept(
 
 @router.post("/concepts/{concept_id}/promote")
 async def promote_concept(
-    request: Request, concept_id: str, body: ReasonBody = ReasonBody()
+    request: Request, concept_id: str, body: ReasonBody | None = None
 ) -> dict:
     return await _transition_concept(request, concept_id, "confirmed", body)
 
 
 @router.post("/concepts/{concept_id}/demote")
-async def demote_concept(
-    request: Request, concept_id: str, body: ReasonBody = ReasonBody()
-) -> dict:
+async def demote_concept(request: Request, concept_id: str, body: ReasonBody | None = None) -> dict:
     return await _transition_concept(request, concept_id, "candidate", body)
 
 
 @router.delete("/concepts/{concept_id}")
 async def tombstone_concept(
-    request: Request, concept_id: str, body: ReasonBody = ReasonBody()
+    request: Request, concept_id: str, body: ReasonBody | None = None
 ) -> dict:
     return await _transition_concept(request, concept_id, "tombstoned", body)
 
@@ -217,14 +215,16 @@ async def merge_concepts(request: Request, body: ConceptMerge) -> dict:
     return row
 
 
-async def _transition_edge(request: Request, edge_id: str, state: str, body: ReasonBody) -> dict:
+async def _transition_edge(
+    request: Request, edge_id: str, state: str, body: ReasonBody | None
+) -> dict:
     cfg = request.app.state.cfg
     row = await request.app.state.graph.transition_edge(
         tenant=cfg.tenant,
         edge_id=edge_id,
         state=state,
         actor=cfg.identity.principal,
-        reason=body.reason,
+        reason=body.reason if body else None,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="edge not found")
@@ -232,17 +232,17 @@ async def _transition_edge(request: Request, edge_id: str, state: str, body: Rea
 
 
 @router.post("/edges/{edge_id}/promote")
-async def promote_edge(request: Request, edge_id: str, body: ReasonBody = ReasonBody()) -> dict:
+async def promote_edge(request: Request, edge_id: str, body: ReasonBody | None = None) -> dict:
     return await _transition_edge(request, edge_id, "confirmed", body)
 
 
 @router.post("/edges/{edge_id}/demote")
-async def demote_edge(request: Request, edge_id: str, body: ReasonBody = ReasonBody()) -> dict:
+async def demote_edge(request: Request, edge_id: str, body: ReasonBody | None = None) -> dict:
     return await _transition_edge(request, edge_id, "candidate", body)
 
 
 @router.delete("/edges/{edge_id}")
-async def tombstone_edge(request: Request, edge_id: str, body: ReasonBody = ReasonBody()) -> dict:
+async def tombstone_edge(request: Request, edge_id: str, body: ReasonBody | None = None) -> dict:
     return await _transition_edge(request, edge_id, "tombstoned", body)
 
 
@@ -296,15 +296,13 @@ async def patch_vocabulary(request: Request, name: str, body: VocabPatch) -> dic
 
 
 @router.post("/vocab/{name}/deprecate")
-async def deprecate_vocabulary(
-    request: Request, name: str, body: ReasonBody = ReasonBody()
-) -> dict:
+async def deprecate_vocabulary(request: Request, name: str, body: ReasonBody | None = None) -> dict:
     cfg = request.app.state.cfg
     row = await request.app.state.graph.deprecate_vocabulary(
         tenant=cfg.tenant,
         name=name,
         actor=cfg.identity.principal,
-        reason=body.reason,
+        reason=body.reason if body else None,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="vocabulary entry not found")
