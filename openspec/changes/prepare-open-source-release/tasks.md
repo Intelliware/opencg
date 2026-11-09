@@ -59,7 +59,7 @@
 - [x] 4.13 Fix the graph Concepts-tab search dropping `tab=concepts` (submitting it landed on the Map tab) (found during phase 4)
 - [x] 4.14 Fix the hydration mismatch (React #418) on entity detail pages: client-rendered dates differ between the server's and the browser's time zone; pin the e2e browser to a non-UTC zone so CI catches regressions (found during phase 4)
 - [x] 4.14a Fix a race on `/graph`: the map rewrote the URL with `history.replaceState` after its first traverse resolved, which overrode a sidebar navigation started during that fetch; it now syncs the URL before fetching (found during phase 4, by 4.12)
-- [ ] 4.15 Decide (Edward) how to handle tombstoned chunks still served by vector search and `/retrieve` (found during phase 4): a follow-up OpenSpec change, or a modified requirement in this one
+- [ ] 4.15 Fix tombstoned chunks still served by vector search and `/retrieve` (found during phase 4). Edward chose a follow-up change: `exclude-tombstoned-from-retrieval` (proposed 2026-11-09, awaiting approval); this box closes when it ships
 - [ ] 4.16 Resolve the intermittent production-only hydration error (React #418, about 1 in 100 page loads, most often on the largest page, `/entities`; found during phase 4). It does not reproduce under `next dev`. The server and client renders of the page content are identical, and disabling streamed metadata (`htmlLimitedBots`) did not remove it. Until it is fixed, `navigation.spec.ts` reloads a route once when #418 is the only error and records a `flaky-hydration` annotation, so a deterministic mismatch still fails
 
 ## 5. Continuous integration
