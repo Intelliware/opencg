@@ -17,3 +17,11 @@ export const Default: Story = {
     </div>
   ),
 };
+
+export const WithSignOut: Story = {
+  render: () => (
+    <div className="h-[480px]">
+      <Sidebar signOut />
+    </div>
+  ),
+};

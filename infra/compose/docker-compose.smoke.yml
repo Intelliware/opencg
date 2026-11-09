@@ -1,0 +1,32 @@
+# Smoke / e2e overlay. Used only by `make smoke`, `make smoke-cloud` and
+# `make e2e` (via tests/smoke/run.sh), never by `make up-d`:
+#
+#   docker compose -f infra/compose/docker-compose.yml \
+#                  -f infra/compose/docker-compose.smoke.yml --profile dev ...
+#
+# Adds the deterministic Ollama-compatible chat stub and mounts the committed
+# smoke fixture into ingestion.
+services:
+  smoke-chat:
+    image: python:3.12-slim
+    command: ["python", "/opt/opencg/smoke-chat/server.py"]
+    volumes:
+      - ../../tests/smoke/chat_stub/server.py:/opt/opencg/smoke-chat/server.py:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:11434/healthz', timeout=2)"
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    profiles: [dev]
+
+  ingestion:
+    environment:
+      # The smoke runner copies the fixture to /tmp/opencg-smoke-<run>, and the
+      # e2e suite submits that path through the admin UI "Run now" form.
+      OPENCG__INGESTION__GIT__LOCAL_ROOTS: /tmp
+    volumes:
+      - ../../tests/smoke/fixtures/knowledge-repo:/opt/opencg/smoke-fixture:ro

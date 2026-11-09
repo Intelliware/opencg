@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 
 from opencg_ingestion.pipeline_runner import run as ingest_run
+from opencg_ingestion.repo_url import RepoUrlError, validate_repo_url
 from opencg_ingestion.runs import RunStore
 
 log = logging.getLogger(__name__)
@@ -116,6 +117,16 @@ class GitRunRequest(BaseModel):
 async def run_git(req: GitRunRequest, bg: BackgroundTasks) -> IngestionRun:
     cfg: openCGConfig = app.state.cfg
     runs: RunStore = app.state.runs
+    try:
+        validate_repo_url(
+            req.repo_url,
+            allowed_hosts=cfg.ingestion.git.allowed_hosts,
+            local_roots=cfg.ingestion.git.local_roots,
+        )
+    except RepoUrlError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "repo_url_rejected", "message": str(exc)}
+        ) from exc
     run = await runs.add(connector="git", repo=req.repo_url)
 
     async def task() -> None:

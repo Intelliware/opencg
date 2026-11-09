@@ -87,6 +87,12 @@ Compose defaults the MCP host port to `8181`, matching README and `CLAUDE.md`. T
 
 When `OPENCG__ADMIN_UI__PASSWORD` is set, Next middleware requires a session cookie obtained from a `/login` form. That covers every page and every `/api/proxy/**` route. When it is unset, the UI keeps today's behaviour but renders a persistent "unauthenticated — local use only" banner and logs a warning at startup. It is marked `REPLACE-BEFORE-PROD`, like `oauth.ts`. The e2e suite covers both modes.
 
+Implementation notes (phase 3):
+- The session cookie is `<issued-at>.<HMAC-SHA256(password, issued-at)>`: HttpOnly, SameSite=Lax, and Secure when the request (or `x-forwarded-proto`) is HTTPS. It expires after 12 hours, and changing the password invalidates every session. It uses Web Crypto only, so the same code runs in middleware and route handlers. Page requests without a session redirect to `/login?next=…`; `/api/**` requests get a 401. `/login`, `/api/auth/*`, `/api/healthz` and the files in `public/` stay open.
+- The password is read at runtime, not baked in at build time. Tested on the standalone image: the same build was run with and without it.
+- The login and logout handlers send relative `Location` headers. The standalone server binds `0.0.0.0`, so absolute redirects built from `req.url` pointed the browser at `http://0.0.0.0:3000`. Found during live verification.
+- `next` is limited to same-origin paths, so `//host` and `/\host` fall back to `/`.
+
 ### D7. Smoke-only wiring leaves the default profile
 
 `smoke-chat` and the ingestion service's fixture bind-mount move to a `smoke` compose profile. `make smoke` and `make e2e` enable that profile, so `make up-d` starts only what a real user needs.

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class IdentityCfg(BaseModel):
@@ -84,6 +84,18 @@ class TelemetryCfg(BaseModel):
 
 class IngestionGitCfg(BaseModel):
     repos: list[str] = Field(default_factory=list)
+    # Guards for URLs submitted over the HTTP API (admin UI "Run now").
+    # allowed_hosts: hosts that may resolve to private addresses (internal git).
+    # local_roots: directories local repo paths may live under (empty = none).
+    allowed_hosts: list[str] = Field(default_factory=list)
+    local_roots: list[str] = Field(default_factory=list)
+
+    @field_validator("allowed_hosts", "local_roots", mode="before")
+    @classmethod
+    def _split_csv(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
 
 
 class IngestionCfg(BaseModel):

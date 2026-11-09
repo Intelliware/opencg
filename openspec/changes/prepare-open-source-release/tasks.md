@@ -28,14 +28,18 @@
 
 ## 3. Compose and security defaults
 
-- [ ] 3.1 Bind every published port to `${OPENCG__BIND_ADDRESS:-127.0.0.1}` using `${OPENCG__<SVC>__HOST_PORT:-default}`, as the project convention requires
-- [ ] 3.2 Move the Postgres user, password and database into `.env` / `.env.example`; derive `OPENCG__POSTGRES__URL` from them
-- [ ] 3.3 Default the MCP host port to 8181 so it matches the docs (container port stays 8080)
-- [ ] 3.4 Move `smoke-chat` and the ingestion fixture mount into a `smoke` profile; have `make smoke` / `make e2e` enable it
-- [ ] 3.5 Validate the ingestion "Run now" URL (allow-list `https://`, `git://` and the fixture path; reject `file://` and internal hosts) to limit SSRF
-- [ ] 3.6 Implement the optional admin access gate: middleware, `/login`, cookie session, unauthenticated banner, startup warning, `REPLACE-BEFORE-PROD` marker
-- [ ] 3.7 Add Storybook stories for the new banner and login form components
-- [ ] 3.8 Unit-test the middleware (blocked proxy call, redirect to login, success)
+- [x] 3.1 Bind every published port to `${OPENCG__BIND_ADDRESS:-127.0.0.1}` using `${OPENCG__<SVC>__HOST_PORT:-default}`, as the project convention requires
+- [x] 3.2 Move the Postgres user, password and database into `.env` / `.env.example`; derive `OPENCG__POSTGRES__URL` from them
+- [x] 3.3 Default the MCP host port to 8181 so it matches the docs (container port stays 8080)
+- [x] 3.4 Move `smoke-chat` and the ingestion fixture mount into a `smoke` profile; have `make smoke` / `make e2e` enable it
+- [x] 3.5 Validate the ingestion "Run now" URL (allow-list `https://`, `git://` and the fixture path; reject `file://` and internal hosts) to limit SSRF
+- [x] 3.6 Implement the optional admin access gate: middleware, `/login`, cookie session, unauthenticated banner, startup warning, `REPLACE-BEFORE-PROD` marker
+- [x] 3.7 Add Storybook stories for the new banner and login form components
+- [x] 3.8 Unit-test the middleware (blocked proxy call, redirect to login, success)
+
+- [x] 3.9 Resolve the critical Dependabot alerts (found on first push, 2026-11-09: 13 critical / 51 high / 74 medium / 11 low): Next.js >= 15.5.28 (+ matching `eslint-config-next`), Storybook >= 8.6.19, Vitest >= 3.2.6 (tinypool), and Python `certifi`, `anyio`
+- [x] 3.10 Resolve the high alerts: `undici`, `@modelcontextprotocol/sdk`, `fast-uri`, `browserslist`, `urllib3` and the rest, by direct upgrades or `pnpm.overrides`; refresh both lockfiles (done: `pnpm audit` reports 0 critical/high; 6 moderate + 1 low remain, each needing a major bump: `esbuild` 0.21 via Storybook's Vite 5, `uuid` 9, `glob` 10, `minimatch` 9/10, `@hono/node-server` 1.x. Python: the `graphifyy` <0.9 pin (medium) needs its own change, because the pin is the adopt-graphifyy contract. Vitest 4 required an mcp-server `vitest.config.ts` so `dist/` tests are not run twice)
+- [ ] 3.11 After merge to `main` (Dependabot only evaluates the default branch), confirm the critical/high alerts auto-close; dismiss any that remain with a written justification; list the remaining moderate/low advisories in SECURITY.md (6.2); re-run the full gate and smoke after the upgrades
 
 ## 4. Admin UI end-to-end suite (Playwright)
 
@@ -59,7 +63,7 @@
 - [ ] 5.3 Nightly schedule and `workflow_dispatch` for the `stack` job
 - [ ] 5.4 Agent-guide sync check: fail if the bodies of `AGENTS.md`, `CLAUDE.md` and `.cursor/rules/opencg.mdc` differ
 - [ ] 5.5 Run `openspec validate --all --strict` in CI
-- [ ] 5.6 `.github/dependabot.yml` for npm, uv/pip, docker and github-actions
+- [ ] 5.6 `.github/dependabot.yml` for npm, uv/pip, docker and github-actions, plus a `dependency-review` job on PRs that fails on critical or high advisories
 - [ ] 5.7 Enable branch protection on `main` with `static` (and `stack`, per 0.2) as required checks (GitHub settings, done by Edward)
 - [ ] 5.8 Add `make ci` to run the whole gate locally
 
@@ -85,6 +89,6 @@
 - [ ] 8.1 Fresh clone in a temp dir, then `make bootstrap && make ci`; every step green
 - [ ] 8.2 `bash tests/smoke/run.sh` on the live stack
 - [ ] 8.3 CI green on the PR, including the `stack` job
-- [ ] 8.4 Final `gitleaks detect` over the full history, plus the `CLAUDE.md` pre-push grep
+- [ ] 8.4 Final `gitleaks detect` over the full history, plus the `CLAUDE.md` pre-push grep; confirm zero open critical or high Dependabot alerts on `main` (or a recorded dismissal for each)
 - [ ] 8.5 Tag `v0.1.0`, publish GitHub release notes from the CHANGELOG, and set the repo description and topics
 - [ ] 8.6 Archive this change (`openspec archive prepare-open-source-release`)

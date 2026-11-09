@@ -5,6 +5,7 @@ import {
   GitBranch,
   Hexagon,
   LayoutDashboard,
+  LogOut,
   Menu,
   ScrollText,
   Search,
@@ -33,7 +34,7 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavContent({ pathname }: { pathname: string }) {
+function NavContent({ pathname, signOut }: { pathname: string; signOut: boolean }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-4 py-5">
@@ -59,20 +60,34 @@ function NavContent({ pathname }: { pathname: string }) {
       </nav>
       <div className="flex items-center justify-between border-t px-4 py-3">
         <span className="text-xs text-muted-foreground">Admin</span>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          {signOut ? (
+            <form method="post" action="/api/auth/logout">
+              <Button type="submit" variant="ghost" size="icon" aria-label="Sign out" title="Sign out">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </form>
+          ) : null}
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   );
 }
 
-export function Sidebar() {
+export interface SidebarProps {
+  /** Show a sign-out control (the admin access gate is enabled). */
+  signOut?: boolean;
+}
+
+export function Sidebar({ signOut = false }: SidebarProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 border-r bg-card md:block">
-        <NavContent pathname={pathname} />
+        <NavContent pathname={pathname} signOut={signOut} />
       </aside>
       <div className="flex items-center gap-2 border-b bg-card px-4 py-2 md:hidden">
         <Sheet open={open} onOpenChange={setOpen}>
@@ -84,7 +99,7 @@ export function Sidebar() {
           <SheetContent side="left" className="w-56 p-0">
             <SheetTitle className="sr-only">Navigation</SheetTitle>
             <div onClick={() => setOpen(false)}>
-              <NavContent pathname={pathname} />
+              <NavContent pathname={pathname} signOut={signOut} />
             </div>
           </SheetContent>
         </Sheet>

@@ -3,7 +3,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-PIPELINE_URL="${PIPELINE_URL:-http://localhost:8000}"
+
+# Read a setting from the environment, else from $ROOT/.env, else a default.
+# Keeps host ports in step with the compose file's OPENCG__*__HOST_PORT values.
+cfg() {
+  local key="$1" default="$2" value="${!1:-}"
+  if [ -z "$value" ] && [ -f "$ROOT/.env" ]; then
+    value="$(sed -n "s/^${key}=//p" "$ROOT/.env" | tail -n 1)"
+  fi
+  printf '%s' "${value:-$default}"
+}
+
+PIPELINE_URL="${PIPELINE_URL:-http://localhost:$(cfg OPENCG__PIPELINE__HOST_PORT 8000)}"
+QDRANT_URL="${QDRANT_URL:-http://localhost:$(cfg OPENCG__QDRANT__HOST_PORT 6333)}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
 SMOKE_INGEST_TIMEOUT_SECONDS="${SMOKE_INGEST_TIMEOUT_SECONDS:-120}"
 SMOKE_CHAT_MODE="${SMOKE_CHAT_MODE:-stub}"
@@ -17,10 +29,14 @@ ACTIVE_PID=""
 OVERALL_TIMER=""
 STAGE_LOG=""
 
+# The smoke overlay adds the chat stub and mounts the fixture into ingestion;
+# it is never part of the default `make up-d` stack.
 COMPOSE=(
   docker compose
   -f "$ROOT/infra/compose/docker-compose.yml"
+  -f "$ROOT/infra/compose/docker-compose.smoke.yml"
   --env-file "$ROOT/.env"
+  --profile dev
 )
 
 say() { printf '\n\e[1;36m▌ %s\e[0m\n' "$*"; }
@@ -115,9 +131,14 @@ run_timed() {
 }
 
 psql_value() {
+  # Credentials come from the container's own POSTGRES_* environment.
   "${COMPOSE[@]}" exec -T postgres \
-    psql -U opencg -d opencg -tA -F '|' -c "$1" | tr -d '\r'
+    sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F "|" -c "$1"' sh "$1" \
+    | tr -d '\r'
 }
+
+say "Apply the smoke overlay (chat stub + fixture mount)"
+"${COMPOSE[@]}" up -d --wait smoke-chat ingestion
 
 say "Wait for pipeline and smoke dependencies"
 for _ in $(seq 1 60); do
@@ -143,7 +164,7 @@ pass "pipeline and smoke dependencies are ready"
 say "Verify Qdrant client/server compatibility"
 CLIENT_VERSION="$("${COMPOSE[@]}" exec -T ingestion uv run python -c \
   "import importlib.metadata; print(importlib.metadata.version('qdrant-client'))")"
-SERVER_VERSION="$(curl -fsS http://localhost:6333/ | python3 -c \
+SERVER_VERSION="$(curl -fsS "$QDRANT_URL/" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["version"])')"
 python3 - "$CLIENT_VERSION" "$SERVER_VERSION" <<'PY'
 import sys

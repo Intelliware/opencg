@@ -72,7 +72,8 @@ def _content_hash(body: bytes) -> str:
 def clone(repo_url: str, dest: Path) -> str:
     """Clone repo, return the commit SHA."""
     subprocess.run(
-        ["git", "clone", "--depth", "1", repo_url, str(dest)],
+        # `--` ends option parsing so a URL can never be read as a git option.
+        ["git", "clone", "--depth", "1", "--", repo_url, str(dest)],
         check=True,
         capture_output=True,
     )

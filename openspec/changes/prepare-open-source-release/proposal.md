@@ -11,6 +11,7 @@ openCG is already public at `github.com/Intelliware/opencg`, but a stranger who 
 - **No end-to-end coverage of the admin UI.** There are 54 component tests (Vitest + jsdom), but nothing drives the real pages (`/`, `/queries`, `/vectors`, `/entities`, `/ingestion`, `/graph`) in a browser against the running stack.
 - **Unsafe network defaults for a public project.** Compose publishes Postgres (with password `opencg`), Qdrant, Valkey and Ollama on every host interface, and the admin UI exposes destructive actions (tombstone, ingestion runs, graph promotion and deletion) with no authentication.
 - **The docs contradict each other and the code.** The README documents the MCP endpoint at `localhost:8181`, but compose and `.env.example` default to `8080`. The README says `bootstrap-thin-mvp` shipped, yet it is still an active change (63/87 tasks). The README lists `stabilize-full-smoke` as in flight, but it is archived. The "In-flight changes" table in `CLAUDE.md`/`AGENTS.md` is stale. The README's host-run path points to `opencg-fabric`.
+- **149 open Dependabot alerts** (13 critical, 51 high), reported on the first push of this branch, including an unauthenticated RCE advisory in the Next.js image optimizer.
 - **Missing open-source hygiene.** There is no CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue or PR templates, or CHANGELOG. `LICENSE` names `edward` as the copyright holder, while the repo lives under the Intelliware org.
 
 ## What Changes
@@ -19,6 +20,7 @@ openCG is already public at `github.com/Intelliware/opencg`, but a stranger who 
 - Add a **Playwright end-to-end suite for the admin UI**. It drives every page against the live compose stack, seeded by the deterministic smoke fixture. It includes destructive flows (tombstone, candidate promote and reject, vocabulary edit), each scoped to data created by the current run.
 - Add **GitHub Actions CI**: lint, type-check, unit tests (TS + Python) and the Storybook build on every PR, plus a full-stack job (compose up → smoke → Playwright e2e) on PRs to `main` and nightly.
 - Harden the defaults: bind infrastructure ports to `127.0.0.1` through `${OPENCG__*__HOST_PORT}` variables, take the Postgres credentials from `.env`, and add an opt-in admin UI access gate with a loud warning when it is disabled.
+- Clear every critical and high dependency advisory (upgrade, override, or justified dismissal) and gate PRs on new ones with dependency review.
 - Add open-source community files, secret scanning (gitleaks) in CI and as a pre-push recipe, and Dependabot.
 - Reconcile the docs: README, `CLAUDE.md`/`AGENTS.md`/`.cursor/rules/opencg.mdc`, `docs/OPERATIONS.md`, and the active-change list (close out or archive `bootstrap-thin-mvp`).
 

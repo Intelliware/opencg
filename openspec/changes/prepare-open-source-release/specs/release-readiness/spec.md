@@ -37,6 +37,20 @@ CI SHALL run gitleaks over the pushed commits, and the full history SHALL pass a
 - **WHEN** a commit adds a string matching a provider API-key pattern
 - **THEN** the secret-scan step fails and names the file and line
 
+### Requirement: No known critical or high vulnerabilities at release
+
+A tagged release SHALL have no open critical or high-severity Dependabot alerts on its default branch. Each remaining alert MUST either be fixed by upgrading or overriding the affected dependency, or be dismissed in GitHub with a written justification (for example, a vulnerable code path that is unreachable, or a development-only tool that is never exposed). CI MUST fail when a pull request introduces a dependency with a known critical or high vulnerability.
+
+#### Scenario: Release is blocked by a critical advisory
+
+- **WHEN** the default branch has an open critical or high Dependabot alert with no recorded dismissal
+- **THEN** release task 8.4 is not satisfied and no tag is created
+
+#### Scenario: PR introduces a vulnerable dependency
+
+- **WHEN** a pull request adds or downgrades a dependency to a version with a known critical or high advisory
+- **THEN** the dependency-review check fails and names the package and advisory
+
 ### Requirement: Safe network defaults
 
 By default, every host port published by the compose stack SHALL bind to `127.0.0.1` and SHALL be configurable through an `OPENCG__<SERVICE>__HOST_PORT` variable. Database credentials MUST come from `.env` rather than literals in the compose file. Services used only for smoke or e2e MUST NOT start under the default `dev` profile.

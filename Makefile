@@ -61,7 +61,7 @@ format:
 ingest-git: ## Ingest a git repo: `make ingest-git REPO=https://github.com/...`
 	$(COMPOSE) exec ingestion uv run --package opencg-ingestion python -m opencg_ingestion.cli git "$(REPO)"
 
-smoke: ## End-to-end smoke test
+smoke: ## End-to-end smoke test (applies the smoke overlay itself)
 	./tests/smoke/run.sh
 
 smoke-cloud: ## Bounded real-provider canary (requires chat API key)
