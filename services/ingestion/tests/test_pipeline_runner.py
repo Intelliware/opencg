@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 
 import pytest
-from opencg_shared import openCGConfig
-from opencg_pipeline.providers import EmbeddingResult
-
 from opencg_ingestion import pipeline_runner
 from opencg_ingestion.chunking import Chunk
 from opencg_ingestion.connectors.git import GitDocument
+from opencg_pipeline.providers import EmbeddingResult
+from opencg_shared import openCGConfig
 
 
 class _Catalog:
@@ -98,7 +96,7 @@ async def test_extractor_timeout_does_not_abort_chunk_loop(monkeypatch):
 
     async def timeout_extract(**kwargs):
         calls.append(kwargs["chunk_entity_id"])
-        raise asyncio.TimeoutError("slow model")
+        raise TimeoutError("slow model")
 
     async def vocab(*args, **kwargs):
         return ["depends_on"]

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from click.testing import CliRunner
-
 from opencg_ingestion import cli
 from opencg_ingestion.reextract import (
     ReextractSummary,

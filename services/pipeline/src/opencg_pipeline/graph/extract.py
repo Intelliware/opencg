@@ -142,7 +142,7 @@ def parse_response(raw: str) -> ExtractionResult | None:
         return None
     try:
         return ExtractionResult.model_validate(data)
-    except Exception:  # noqa: BLE001 — defensive on model output
+    except Exception:
         return None
 
 
@@ -211,7 +211,7 @@ async def extract_for_chunk(
                 chat.chat(system=system, user=user, response_schema=_RESPONSE_SCHEMA),
                 timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             EXTRACTOR_ERRORS.labels(reason="timeout").inc()
             span.set_attribute("error.reason", "timeout")
             log.warning(

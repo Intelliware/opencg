@@ -80,9 +80,7 @@ async def get_entity(request: Request, entity_id: str) -> Entity:
     # can consume directly.
     lineage_in = row.get("lineage") or {}
     lineage = EntityLineage(
-        parent=EntityRef.model_validate(lineage_in["parent"])
-        if lineage_in.get("parent")
-        else None,
+        parent=EntityRef.model_validate(lineage_in["parent"]) if lineage_in.get("parent") else None,
         children=[EntityRef.model_validate(c) for c in lineage_in.get("children", [])],
     )
     row["lineage"] = lineage.model_dump()
@@ -90,8 +88,7 @@ async def get_entity(request: Request, entity_id: str) -> Entity:
         tenant=cfg.tenant, entity_id=entity_id, limit=20
     )
     row["audit_appearances"] = [
-        EntityAuditAppearance.model_validate(item).model_dump()
-        for item in appearances
+        EntityAuditAppearance.model_validate(item).model_dump() for item in appearances
     ]
     return Entity.model_validate(row)
 
@@ -99,18 +96,14 @@ async def get_entity(request: Request, entity_id: str) -> Entity:
 @router.delete("/entities/{entity_id}", response_model=EntityListItem)
 async def tombstone_entity(request: Request, entity_id: str) -> EntityListItem:
     cfg = request.app.state.cfg
-    row = await request.app.state.catalog.tombstone(
-        tenant=cfg.tenant, entity_id=entity_id
-    )
+    row = await request.app.state.catalog.tombstone(tenant=cfg.tenant, entity_id=entity_id)
     if row is None:
         raise HTTPException(status_code=404, detail="entity not found")
     return EntityListItem.model_validate(row)
 
 
 @router.post("/search/vector", response_model=VectorSearchResponse)
-async def vector_search(
-    request: Request, payload: VectorSearchRequest
-) -> VectorSearchResponse:
+async def vector_search(request: Request, payload: VectorSearchRequest) -> VectorSearchResponse:
     embeddings = request.app.state.embeddings
     vector_index = request.app.state.vector
     tracer = request.app.state.tracer
@@ -161,9 +154,7 @@ async def vector_search(
 # --- Ingestion proxies -----------------------------------------------------
 
 
-async def _proxy(
-    request: Request, method: str, path: str, json: Any | None = None
-) -> Any:
+async def _proxy(request: Request, method: str, path: str, json: Any | None = None) -> Any:
     client: httpx.AsyncClient = request.app.state.ingestion_client
     try:
         resp = await client.request(method, path, json=json)

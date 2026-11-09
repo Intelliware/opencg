@@ -1,5 +1,4 @@
 from click.testing import CliRunner
-
 from opencg_ingestion.cli import main
 from opencg_ingestion.pipeline_runner import IngestionSummary
 

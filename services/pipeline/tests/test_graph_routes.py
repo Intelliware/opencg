@@ -4,9 +4,8 @@ from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from opencg_shared import openCGConfig
-
 from opencg_pipeline.graph import routes
+from opencg_shared import openCGConfig
 
 
 def _concept(concept_id: str = "c1", state: str = "confirmed") -> dict:
@@ -247,12 +246,10 @@ def test_traverse_and_concept_not_found():
 
 def test_traverse_enforces_caps():
     client, _ = _client()
-    assert client.get(
-        "/graph/traverse", params={"concept_id": "c1", "depth": 5}
-    ).status_code == 422
-    assert client.get(
-        "/graph/traverse", params={"concept_id": "c1", "limit": 201}
-    ).status_code == 422
+    assert client.get("/graph/traverse", params={"concept_id": "c1", "depth": 5}).status_code == 422
+    assert (
+        client.get("/graph/traverse", params={"concept_id": "c1", "limit": 201}).status_code == 422
+    )
 
 
 def test_concept_state_transitions_and_patch():

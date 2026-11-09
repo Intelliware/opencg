@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from opencg_ingestion.runs import RunStore
 
 
@@ -27,9 +26,7 @@ async def test_update_status_and_finished_writes_finished_at():
     assert running.status == "running"
     assert running.finished_at is None
 
-    done = await store.update(
-        run.run_id, status="succeeded", parents=5, chunks=23, finished=True
-    )
+    done = await store.update(run.run_id, status="succeeded", parents=5, chunks=23, finished=True)
     assert done is not None
     assert done.status == "succeeded"
     assert done.parents == 5

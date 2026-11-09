@@ -5,7 +5,6 @@ import json
 import pytest
 import respx
 from httpx import Response
-
 from opencg_pipeline.providers import OllamaChat
 
 

@@ -1,7 +1,7 @@
 """Shared Python building blocks for openCG services."""
 
-from opencg_shared.config import openCGConfig, load_config
-from opencg_shared.metrics import metrics_app, record_stage_tokens, record_request
+from opencg_shared.config import load_config, openCGConfig
+from opencg_shared.metrics import metrics_app, record_request, record_stage_tokens
 from opencg_shared.otel import setup_otel
 from opencg_shared.types import (
     AuditRecord,
@@ -56,7 +56,6 @@ __all__ = [
     "ExtractedRelation",
     "ExtractionResult",
     "GraphAuditRow",
-    "openCGConfig",
     "IdentityContext",
     "IngestEvent",
     "IngestionRun",
@@ -74,6 +73,7 @@ __all__ = [
     "VectorSearchResponse",
     "load_config",
     "metrics_app",
+    "openCGConfig",
     "record_request",
     "record_stage_tokens",
     "setup_otel",

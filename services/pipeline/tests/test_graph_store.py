@@ -4,15 +4,14 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-
 from opencg_pipeline.storage.graph import GraphStore, _reachable_ids
 
 
 class _Tx:
-    def __init__(self, conn: "_Conn") -> None:
+    def __init__(self, conn: _Conn) -> None:
         self.conn = conn
 
-    async def __aenter__(self) -> "_Conn":
+    async def __aenter__(self) -> _Conn:
         self.conn.tx_started = True
         return self.conn
 
@@ -101,9 +100,7 @@ async def test_edge_transition_reflects_age_and_writes_audit_in_transaction():
     assert "ag_catalog.agtype" in sql
     assert "INSERT INTO opencg.graph_audit_log" in sql
     audit_args = next(
-        args
-        for statement, args in conn.calls
-        if "INSERT INTO opencg.graph_audit_log" in statement
+        args for statement, args in conn.calls if "INSERT INTO opencg.graph_audit_log" in statement
     )
     assert audit_args[:7] == (
         "alice",
@@ -128,10 +125,7 @@ async def test_idempotent_edge_transition_does_not_write_audit():
     )
 
     assert result is not None and result["state"] == "confirmed"
-    assert not any(
-        "INSERT INTO opencg.graph_audit_log" in statement
-        for statement, _ in conn.calls
-    )
+    assert not any("INSERT INTO opencg.graph_audit_log" in statement for statement, _ in conn.calls)
 
 
 @pytest.mark.asyncio

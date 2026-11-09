@@ -4,16 +4,14 @@ import asyncio
 import json
 
 import pytest
-
 from opencg_pipeline.graph.extract import (
     build_prompt,
     extract_for_chunk,
     filter_result,
     parse_response,
 )
-from opencg_pipeline.providers import ChatResult, OllamaChat
+from opencg_pipeline.providers import ChatResult
 from opencg_shared import ExtractionResult
-
 
 VOCAB = ["depends_on", "defined_in", "mentions", "related_to", "causes"]
 
@@ -47,7 +45,12 @@ def test_parse_response_simple_object():
         {
             "concepts": [{"name": "Authentication"}],
             "relations": [
-                {"from": "Authentication", "relation": "depends_on", "to": "Token Store", "confidence": 0.9}
+                {
+                    "from": "Authentication",
+                    "relation": "depends_on",
+                    "to": "Token Store",
+                    "confidence": 0.9,
+                }
             ],
         }
     )
@@ -163,14 +166,26 @@ async def test_extract_for_chunk_happy_path():
             "concepts": [{"name": "Caching"}, {"name": "Pricing"}],
             "relations": [
                 {"from": "Caching", "relation": "depends_on", "to": "Pricing", "confidence": 0.9},
-                {"from": "Caching", "relation": "invokes_magic", "to": "Pricing", "confidence": 0.9},  # bad vocab
-                {"from": "Caching", "relation": "depends_on", "to": "Pricing", "confidence": 0.4},  # low
+                {
+                    "from": "Caching",
+                    "relation": "invokes_magic",
+                    "to": "Pricing",
+                    "confidence": 0.9,
+                },  # bad vocab
+                {
+                    "from": "Caching",
+                    "relation": "depends_on",
+                    "to": "Pricing",
+                    "confidence": 0.4,
+                },  # low
             ],
         }
     )
     chat = _FakeChat(payload, tokens_in=17, tokens_out=11)
     result, telemetry = await extract_for_chunk(
-        chunk_text="some text", vocabulary=VOCAB, chat=chat  # type: ignore[arg-type]
+        chunk_text="some text",
+        vocabulary=VOCAB,
+        chat=chat,  # type: ignore[arg-type]
     )
     assert telemetry.parse_failed is False
     assert telemetry.tokens_in == 17

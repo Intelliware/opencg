@@ -43,6 +43,7 @@ async def run(
 
     telemetry includes per-leg latencies, model usage, vector_collection hit list.
     """
+
     # Dense leg: embed query, search Qdrant. Lexical leg: Postgres FTS+trgm.
     # Both run in parallel.
     async def dense_leg() -> tuple[list[VectorHit], int, str]:

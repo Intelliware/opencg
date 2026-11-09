@@ -53,7 +53,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/healthz":
             self._json(200, {"status": "ok"})
             return
@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": "not found"})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         global _requests
         if self.path != "/api/chat":
             self._json(404, {"error": "not found"})
@@ -73,7 +73,11 @@ class Handler(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(length) or b"{}")
         messages = request.get("messages") or []
         user_text = next(
-            (message.get("content", "") for message in reversed(messages) if message.get("role") == "user"),
+            (
+                message.get("content", "")
+                for message in reversed(messages)
+                if message.get("role") == "user"
+            ),
             "",
         )
         with _lock:

@@ -91,5 +91,5 @@ def record_stage_tokens(
         ).inc(tokens_out)
 
 
-async def metrics_app(request: Request) -> Response:  # noqa: ARG001
+async def metrics_app(request: Request) -> Response:
     return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)

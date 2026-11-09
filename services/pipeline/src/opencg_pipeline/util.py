@@ -13,9 +13,7 @@ def estimate_tokens(text: str, *, tokens_per_char: float = 0.25) -> int:
     return max(1, math.ceil(len(text) * tokens_per_char))
 
 
-def reciprocal_rank_fusion(
-    ranked_lists: list[list[str]], *, k: int = 60
-) -> dict[str, float]:
+def reciprocal_rank_fusion(ranked_lists: list[list[str]], *, k: int = 60) -> dict[str, float]:
     """RRF fusion: combine multiple ranked lists into a single score map."""
     scores: dict[str, float] = {}
     for ranking in ranked_lists:

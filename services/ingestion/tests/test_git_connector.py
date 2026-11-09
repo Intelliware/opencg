@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from opencg_ingestion.connectors.git import (
     GitDocument,
     _stable_id,
@@ -32,14 +31,20 @@ def fake_repo(tmp_path: Path) -> Path:
     subprocess.run(
         ["git", "-C", str(repo), "commit", "-q", "-m", "init"],
         check=True,
-        env={"GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z", "HOME": str(tmp_path), "PATH": "/usr/bin:/usr/local/bin:/opt/homebrew/bin"},
+        env={
+            "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z",
+            "HOME": str(tmp_path),
+            "PATH": "/usr/bin:/usr/local/bin:/opt/homebrew/bin",
+        },
     )
     return repo
 
 
 def test_walk_repo_yields_text_files_only(fake_repo: Path):
     docs = list(
-        walk_repo(tenant="t", repo_url="https://example.com/x.git", repo_path=fake_repo, revision="abc")
+        walk_repo(
+            tenant="t", repo_url="https://example.com/x.git", repo_path=fake_repo, revision="abc"
+        )
     )
     paths = sorted(d.metadata["path"] for d in docs)
     assert "README.md" in paths
@@ -63,7 +68,9 @@ def test_stable_id_tenant_isolation():
 
 def test_walk_repo_document_shape(fake_repo: Path):
     docs = list(
-        walk_repo(tenant="t", repo_url="https://example.com/x.git", repo_path=fake_repo, revision="abc")
+        walk_repo(
+            tenant="t", repo_url="https://example.com/x.git", repo_path=fake_repo, revision="abc"
+        )
     )
     readme = next(d for d in docs if d.metadata["path"] == "README.md")
     assert isinstance(readme, GitDocument)

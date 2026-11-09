@@ -7,14 +7,13 @@ the routing + background-task orchestration only.
 from __future__ import annotations
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
-from opencg_shared import openCGConfig
-
 from opencg_ingestion import server as srv
 from opencg_ingestion.runs import RunStore
+from opencg_shared import openCGConfig
 
 
 @pytest.fixture

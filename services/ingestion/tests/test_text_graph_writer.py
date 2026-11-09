@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from opencg_ingestion import text_graph_writer
 from opencg_ingestion.text_graph_writer import write_text_graph
 from opencg_pipeline.storage.catalog import CatalogStore
@@ -9,10 +8,10 @@ from opencg_shared import ExtractionResult
 
 
 class _Tx:
-    def __init__(self, conn: "_Conn") -> None:
+    def __init__(self, conn: _Conn) -> None:
         self._conn = conn
 
-    async def __aenter__(self) -> "_Conn":
+    async def __aenter__(self) -> _Conn:
         self._conn.tx_started = True
         return self._conn
 
@@ -117,17 +116,12 @@ async def test_writes_normalized_concepts_edge_evidence_and_age():
 
     assert (concepts, edges) == (2, 1)
     concept_insert = next(
-        args
-        for sql, args in conn.statements
-        if "INSERT INTO opencg.concept" in sql
+        args for sql, args in conn.statements if "INSERT INTO opencg.concept" in sql
     )
     assert concept_insert[3] == "prompt caching"
     assert concept_insert[5] == ["prompt cache"]
     assert any("ag_catalog.cypher" in sql for sql, _ in conn.statements)
-    assert any(
-        "INSERT INTO opencg.relationship_evidence" in sql
-        for sql, _ in conn.statements
-    )
+    assert any("INSERT INTO opencg.relationship_evidence" in sql for sql, _ in conn.statements)
     assert conn.tx_started and conn.tx_finished and not conn.rolled_back
 
 
@@ -155,28 +149,18 @@ async def test_uses_authoritative_concept_ids_after_dedupe_conflict():
     )
 
     edge_insert = next(
-        args
-        for sql, args in conn.statements
-        if "INSERT INTO opencg.relationship_edge" in sql
+        args for sql, args in conn.statements if "INSERT INTO opencg.relationship_edge" in sql
     )
     assert edge_insert[3:5] == ("existing-code-id", "stored-token-id")
     evidence_insert = next(
-        args
-        for sql, args in conn.statements
-        if "INSERT INTO opencg.relationship_evidence" in sql
+        args for sql, args in conn.statements if "INSERT INTO opencg.relationship_evidence" in sql
     )
     assert evidence_insert[0] == "existing-code-edge"
-    reflected = [
-        args[0]
-        for sql, args in conn.statements
-        if "MERGE (concept:Concept" in sql
-    ]
+    reflected = [args[0] for sql, args in conn.statements if "MERGE (concept:Concept" in sql]
     assert '"concept_id": "existing-code-id"' in reflected[0]
     assert '"state": "confirmed"' in reflected[0]
     edge_reflection = next(
-        args[0]
-        for sql, args in conn.statements
-        if "MERGE (source)-[edge:depends_on" in sql
+        args[0] for sql, args in conn.statements if "MERGE (source)-[edge:depends_on" in sql
     )
     assert '"edge_id": "existing-code-edge"' in edge_reflection
     assert '"state": "confirmed"' in edge_reflection

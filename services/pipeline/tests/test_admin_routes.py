@@ -12,15 +12,12 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from opencg_shared import openCGConfig
-
 from opencg_pipeline import admin_routes
 from opencg_pipeline.providers import EmbeddingResult
 from opencg_pipeline.storage.vector import VectorHit
-
+from opencg_shared import openCGConfig
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -30,17 +27,20 @@ from opencg_pipeline.storage.vector import VectorHit
 @dataclass
 class FakeCatalog:
     list_result: tuple[list[dict[str, Any]], int] = (
-        ([{
-            "entity_id": "e1",
-            "tenant": "default",
-            "source": "git",
-            "source_uri": "git://x/y",
-            "title": "y",
-            "classification": "internal",
-            "freshness_state": "fresh",
-            "updated_at": datetime(2026, 6, 11),
-            "tombstoned_at": None,
-        }], 1)
+        [
+            {
+                "entity_id": "e1",
+                "tenant": "default",
+                "source": "git",
+                "source_uri": "git://x/y",
+                "title": "y",
+                "classification": "internal",
+                "freshness_state": "fresh",
+                "updated_at": datetime(2026, 6, 11),
+                "tombstoned_at": None,
+            }
+        ],
+        1,
     )
     get_result: dict[str, Any] | None = None
     tombstone_result: dict[str, Any] | None = None
@@ -67,7 +67,7 @@ class FakeEmbeddings:
 class FakeVector:
     hits: list[VectorHit]
 
-    async def search_all(self, *, vector, limit, filters=None):  # noqa: ARG002
+    async def search_all(self, *, vector, limit, filters=None):
         return self.hits[:limit]
 
 
@@ -192,7 +192,11 @@ def test_get_entity_returns_lineage_and_audit_appearances():
             "lineage": {
                 "parent": None,
                 "children": [
-                    {"entity_id": "c1", "title": "file (chunk 0)", "source_uri": "git://x/file#chunk=0"}
+                    {
+                        "entity_id": "c1",
+                        "title": "file (chunk 0)",
+                        "source_uri": "git://x/file#chunk=0",
+                    }
                 ],
             },
         }

@@ -182,9 +182,7 @@ async def tombstone_concept(
 
 
 @router.patch("/concepts/{concept_id}")
-async def patch_concept(
-    request: Request, concept_id: str, body: ConceptPatch
-) -> dict:
+async def patch_concept(request: Request, concept_id: str, body: ConceptPatch) -> dict:
     cfg = request.app.state.cfg
     try:
         row = await request.app.state.graph.patch_concept(
@@ -219,9 +217,7 @@ async def merge_concepts(request: Request, body: ConceptMerge) -> dict:
     return row
 
 
-async def _transition_edge(
-    request: Request, edge_id: str, state: str, body: ReasonBody
-) -> dict:
+async def _transition_edge(request: Request, edge_id: str, state: str, body: ReasonBody) -> dict:
     cfg = request.app.state.cfg
     row = await request.app.state.graph.transition_edge(
         tenant=cfg.tenant,
@@ -236,23 +232,17 @@ async def _transition_edge(
 
 
 @router.post("/edges/{edge_id}/promote")
-async def promote_edge(
-    request: Request, edge_id: str, body: ReasonBody = ReasonBody()
-) -> dict:
+async def promote_edge(request: Request, edge_id: str, body: ReasonBody = ReasonBody()) -> dict:
     return await _transition_edge(request, edge_id, "confirmed", body)
 
 
 @router.post("/edges/{edge_id}/demote")
-async def demote_edge(
-    request: Request, edge_id: str, body: ReasonBody = ReasonBody()
-) -> dict:
+async def demote_edge(request: Request, edge_id: str, body: ReasonBody = ReasonBody()) -> dict:
     return await _transition_edge(request, edge_id, "candidate", body)
 
 
 @router.delete("/edges/{edge_id}")
-async def tombstone_edge(
-    request: Request, edge_id: str, body: ReasonBody = ReasonBody()
-) -> dict:
+async def tombstone_edge(request: Request, edge_id: str, body: ReasonBody = ReasonBody()) -> dict:
     return await _transition_edge(request, edge_id, "tombstoned", body)
 
 

@@ -16,9 +16,9 @@ import logging
 import subprocess
 import tempfile
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 from graphify import collect_files
 
@@ -29,9 +29,19 @@ log = logging.getLogger(__name__)
 # time; this set is the fallback / additional surface for prose-y files
 # graphifyy doesn't (and shouldn't) parse.
 TEXT_EXTS = {
-    ".md", ".markdown", ".rst", ".txt",
-    ".yaml", ".yml", ".toml", ".json", ".ini",
-    ".html", ".css", ".scss", ".sass",
+    ".md",
+    ".markdown",
+    ".rst",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".json",
+    ".ini",
+    ".html",
+    ".css",
+    ".scss",
+    ".sass",
 }
 
 MAX_FILE_BYTES = 1_000_000  # 1 MB cap per file
@@ -84,11 +94,7 @@ def _discover_files(repo_path: Path) -> list[Path]:
     graphifyy doesn't parse but we still want to embed.
     """
     code_files = collect_files(repo_path)
-    text_files = [
-        p
-        for p in repo_path.rglob("*")
-        if p.is_file() and p.suffix.lower() in TEXT_EXTS
-    ]
+    text_files = [p for p in repo_path.rglob("*") if p.is_file() and p.suffix.lower() in TEXT_EXTS]
     # Dedupe — `collect_files` may include some files (e.g. .json) that also
     # appear in TEXT_EXTS. Code path wins; the runner dispatches by extension.
     seen = {p.resolve() for p in code_files}
@@ -111,7 +117,7 @@ def walk_repo(
     repo_name = repo_url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
     try:
         paths = _discover_files(repo_path)
-    except Exception as exc:  # noqa: BLE001 — best-effort whole-repo discovery
+    except Exception as exc:
         log.error("file discovery failed for %s: %s", repo_path, exc)
         return
 

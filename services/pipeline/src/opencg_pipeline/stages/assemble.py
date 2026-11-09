@@ -44,7 +44,11 @@ def run(
         tokens = estimate_tokens(c.text, tokens_per_char=tokens_per_char)
         if c.classification not in allowed:
             decisions.append(
-                {"entity_id": c.entity_id, "decision": "deny", "reason": "classification_restricted"}
+                {
+                    "entity_id": c.entity_id,
+                    "decision": "deny",
+                    "reason": "classification_restricted",
+                }
             )
             continue
         if used + tokens > token_budget:
@@ -54,7 +58,5 @@ def run(
             continue
         kept.append(c)
         used += tokens
-        decisions.append(
-            {"entity_id": c.entity_id, "decision": "include", "tokens": tokens}
-        )
+        decisions.append({"entity_id": c.entity_id, "decision": "include", "tokens": tokens})
     return kept, decisions

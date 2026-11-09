@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from opencg_ingestion.chunking import (
     chunk_code_by_symbols,
     chunk_text,
     is_code_path,
 )
-
 
 # --- text chunker (unchanged behaviour from thin MVP) ----------------------
 
@@ -103,7 +100,9 @@ def test_zero_symbol_python_file_falls_back_to_text(tmp_path):
 def test_oversized_function_is_paragraph_split(tmp_path):
     """One function whose body is huge gets split into multiple chunks
     each tagged with the parent symbol id."""
-    body_lines = ["    x = " + ("'x' * 50") + "  # filler line " + str(i) + "\n" for i in range(800)]
+    body_lines = [
+        "    x = " + ("'x' * 50") + "  # filler line " + str(i) + "\n" for i in range(800)
+    ]
     src = "def huge():\n" + "".join(body_lines) + "    return 0\n"
     p = tmp_path / "huge.py"
     p.write_text(src)

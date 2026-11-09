@@ -212,9 +212,7 @@ class CatalogStore:
             row = await conn.fetchrow(sql, tenant, entity_id)
         return dict(row) if row else None
 
-    async def get_evidence_chunks(
-        self, *, tenant: str, edge_id: str
-    ) -> list[dict[str, Any]]:
+    async def get_evidence_chunks(self, *, tenant: str, edge_id: str) -> list[dict[str, Any]]:
         """Return compact catalog references supporting a graph edge."""
         pool = self._require_pool()
         async with pool.acquire() as conn:
@@ -234,9 +232,7 @@ class CatalogStore:
             )
         return [dict(row) for row in rows]
 
-    async def lexical_search(
-        self, *, tenant: str, query: str, limit: int
-    ) -> list[CatalogHit]:
+    async def lexical_search(self, *, tenant: str, query: str, limit: int) -> list[CatalogHit]:
         """Postgres FTS + trigram fallback. The BM25-ish leg of hybrid retrieval."""
         pool = self._require_pool()
         sql = """

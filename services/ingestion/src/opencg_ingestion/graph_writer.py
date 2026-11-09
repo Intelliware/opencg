@@ -30,7 +30,6 @@ import uuid
 from typing import Any
 
 import graphify
-
 from opencg_pipeline.graph.age import reflect_concept, reflect_edge
 from opencg_pipeline.storage.catalog import CatalogStore
 
@@ -53,7 +52,7 @@ _RELATION_MAP: dict[str, str] = {
 
 _CONFIDENCE_MAP: dict[str, tuple[str, float]] = {
     "EXTRACTED": ("confirmed", 1.0),
-    "INFERRED":  ("confirmed", 0.85),
+    "INFERRED": ("confirmed", 0.85),
     "AMBIGUOUS": ("candidate", 0.5),
 }
 
@@ -108,7 +107,7 @@ async def write_code_graph(
     # endpoints without round-trips.
     id_to_concept: dict[str, tuple[str, str]] = {}
 
-    pool = catalog._require_pool()  # noqa: SLF001 — share the lifespan pool
+    pool = catalog._require_pool()
     concepts_written = 0
     edges_written = 0
 
@@ -209,9 +208,7 @@ async def write_code_graph(
                 if from_node is None or to_node is None:
                     continue
                 conf_label = edge.get("confidence", "EXTRACTED")
-                state, conf_value = _CONFIDENCE_MAP.get(
-                    conf_label, ("confirmed", 1.0)
-                )
+                state, conf_value = _CONFIDENCE_MAP.get(conf_label, ("confirmed", 1.0))
                 edge_id = _edge_uuid(tenant, from_node[0], mapped, to_node[0])
                 await conn.execute(
                     """

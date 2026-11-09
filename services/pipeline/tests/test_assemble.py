@@ -43,8 +43,6 @@ def test_classification_filtered():
 
 
 def test_empty_input():
-    kept, decisions = run(
-        candidates=[], roles=["reader"], token_budget=1000, tokens_per_char=0.25
-    )
+    kept, decisions = run(candidates=[], roles=["reader"], token_budget=1000, tokens_per_char=0.25)
     assert kept == []
     assert decisions == []
