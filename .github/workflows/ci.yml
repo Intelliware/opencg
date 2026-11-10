@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3 # no moving major tag upstream
         with:
           python-version: "3.12"
           enable-cache: true
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/dependency-review-action@v5
+      - uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high
 
