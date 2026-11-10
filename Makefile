@@ -50,6 +50,7 @@ test-ui:
 	pnpm --filter @opencg/admin-ui test
 
 lint: ## Lint TS (eslint/tsc) and Python (ruff check + format check)
+	pnpm --filter @opencg/shared build
 	pnpm -r lint
 	uv run ruff check .
 	uv run ruff format --check .
