@@ -241,4 +241,4 @@ Code-side ingestion uses [graphifyy](https://github.com/safishamsi/graphify) (MI
 
 ## License
 
-[MIT](./LICENSE).
+[MIT](./LICENSE), copyright Electric Mind. Third-party components and their licences are listed in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md). See [`CONTRIBUTING.md`](./CONTRIBUTING.md) to get involved and [`SECURITY.md`](./SECURITY.md) to report a vulnerability.

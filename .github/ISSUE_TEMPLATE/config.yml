@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Intelliware/opencg/security/advisories/new
+    about: Please report security problems privately, not in a public issue.
+  - name: Contributing guide
+    url: https://github.com/Intelliware/opencg/blob/main/CONTRIBUTING.md
+    about: Setup, the OpenSpec workflow and how to run the tests.
