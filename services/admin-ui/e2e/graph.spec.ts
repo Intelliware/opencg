@@ -5,6 +5,10 @@ import { expect, test } from "./fixtures";
 // The concept detail header; neighbour links carry the same title attribute.
 const heading = (scope: Page | Locator, name: string) => scope.locator(`p[title="${name}"]`);
 
+// Accessible names continue after the concept name (aliases, state). Reject a
+// following word character or hyphen, so "X" doesn't match the UI run's "X-ui".
+const named = (name: string) => new RegExp(`^${name}(?![\\w-])`);
+
 test("graph tabs are in the expected order", async ({ page }) => {
   await page.goto("/graph");
   await expect(page.locator('a[href^="/graph?tab="]')).toHaveText([
@@ -22,8 +26,8 @@ test("concept search opens the run's concept detail", async ({ page, pipeline, r
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`search=${run.id}`));
 
-  await expect(page.getByRole("link", { name: new RegExp(`Context windows ${run.id}\\b`) })).toBeVisible();
-  await page.getByRole("link", { name: new RegExp(`Smoke catalogue ${run.id}\\b`) }).click();
+  await expect(page.getByRole("link", { name: named(`Context windows ${run.id}`) })).toBeVisible();
+  await page.getByRole("link", { name: named(`Smoke catalogue ${run.id}`) }).click();
   await expect(page).toHaveURL(new RegExp(`concept_id=${catalogue.concept_id}`));
   await expect(heading(page, catalogue.name)).toBeVisible();
   await expect(page.getByRole("tab", { name: /^Candidate \d+$/ })).toBeVisible();
@@ -37,7 +41,7 @@ test("the map's detail panel follows concept search", async ({ page, pipeline, r
   await expect(page.getByRole("button", { name: "Candidates: on" })).toBeVisible();
 
   await page.getByLabel("Search concepts").fill(context.name);
-  await page.getByRole("list").getByRole("button", { name: new RegExp(`^${context.name}`) }).click();
+  await page.getByRole("list").getByRole("button", { name: named(context.name) }).click();
   await expect(heading(panel, context.name)).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`focus=${context.concept_id}`));
 });
