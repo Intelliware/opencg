@@ -73,7 +73,7 @@
 - [ ] 5.7 Enable branch protection on `main` with `static` (and `stack`, per 0.2) as required checks (GitHub settings, done by Edward). The ruleset is committed as `.github/rulesets/main-branch-protection.json` (Edward, 2026-11-10): a PR with 1 approving review, stale approvals dismissed on push, and review threads resolved. Apply it with `gh api repos/Intelliware/opencg/rulesets --method POST --input .github/rulesets/main-branch-protection.json`. The ruleset also blocks deleting or force-pushing `main`, and requires the `static`, `stack` and `dependency-review` checks (pinned to the GitHub Actions app, ID 15368). It doesn't require branches to be up to date, so a merge doesn't force a rebase
 - [x] 5.8 Add `make ci` to run the whole gate locally (`ci-static` + `ci-stack`; both pass locally, in 18 s and 65 s)
 - [x] 5.9 Add a root `.dockerignore`: build contexts were about 1.7 GB, and included `.env` and local admin-ui build/test state (found during phase 5)
-- [ ] 5.10 First green run of `static`, `dependency-review` and `stack` on GitHub (draft PR into `main`)
+- [x] 5.10 First green run of `static`, `dependency-review` and `stack` on GitHub (draft PR into `main`): [PR #1](https://github.com/Intelliware/opencg/pull/1) at `feb36ea`. `static` 1 min 31 s; `stack` 7 min 11 s from cold caches (image build 208 s, stack start including the model pull 62 s, smoke 21 s, e2e 54 s with 19 passed); the Ollama model and Playwright caches were saved. The first two runs found an unresolvable `setup-uv@v10` tag and a fresh-clone `make lint` ordering bug, both fixed
 
 ## 6. Community files
 
