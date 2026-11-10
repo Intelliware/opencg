@@ -119,8 +119,8 @@ CREATE INDEX relationship_evidence_entity_ix ON opencg.relationship_evidence (en
 -- Grants (the `opencg` role exists already from 090_grants.sql' s ALTER DEFAULT)
 -- ---------------------------------------------------------------------------
 
-GRANT SELECT, INSERT, UPDATE ON opencg.relationship_vocab    TO opencg;
-GRANT SELECT, INSERT, UPDATE ON opencg.concept               TO opencg;
-GRANT SELECT, INSERT, UPDATE ON opencg.relationship_edge     TO opencg;
-GRANT SELECT, INSERT, UPDATE ON opencg.relationship_evidence TO opencg;
-GRANT USAGE, SELECT ON opencg.relationship_evidence_evidence_id_seq TO opencg;
+GRANT SELECT, INSERT, UPDATE ON opencg.relationship_vocab    TO CURRENT_USER;
+GRANT SELECT, INSERT, UPDATE ON opencg.concept               TO CURRENT_USER;
+GRANT SELECT, INSERT, UPDATE ON opencg.relationship_edge     TO CURRENT_USER;
+GRANT SELECT, INSERT, UPDATE ON opencg.relationship_evidence TO CURRENT_USER;
+GRANT USAGE, SELECT ON opencg.relationship_evidence_evidence_id_seq TO CURRENT_USER;
