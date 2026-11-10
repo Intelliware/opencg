@@ -248,3 +248,22 @@ async def test_get_evidence_chunks_returns_entity_refs():
         }
     ]
     assert conn.calls[0][2] == ("default", "edge-1")
+
+
+@pytest.mark.asyncio
+async def test_live_entity_ids_returns_untombstoned_subset():
+    conn = _Conn(fetch_rows=[[{"entity_id": "a"}]])
+    live = await _store_with(conn).live_entity_ids(tenant="default", entity_ids=["a", "b", "c"])
+
+    assert live == {"a"}
+    kind, sql, args = conn.calls[0]
+    assert kind == "fetch"
+    assert "entity_id = ANY($2::uuid[])" in sql
+    assert "tombstoned_at IS NULL" in sql
+    assert args == ("default", ["a", "b", "c"])
+
+
+@pytest.mark.asyncio
+async def test_live_entity_ids_empty_input_skips_the_database():
+    store = CatalogStore("postgresql://unused")
+    assert await store.live_entity_ids(tenant="default", entity_ids=[]) == set()

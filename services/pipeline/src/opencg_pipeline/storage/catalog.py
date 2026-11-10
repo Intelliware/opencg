@@ -212,6 +212,24 @@ class CatalogStore:
             row = await conn.fetchrow(sql, tenant, entity_id)
         return dict(row) if row else None
 
+    async def live_entity_ids(self, *, tenant: str, entity_ids: list[str]) -> set[str]:
+        """The subset of `entity_ids` that exist and are not tombstoned.
+
+        Tombstoning never touches Qdrant, so anything served from the vector
+        index must pass through this before it reaches a caller.
+        """
+        if not entity_ids:
+            return set()
+        pool = self._require_pool()
+        sql = """
+        SELECT entity_id::text
+        FROM opencg.entity
+        WHERE tenant = $1 AND entity_id = ANY($2::uuid[]) AND tombstoned_at IS NULL
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, tenant, entity_ids)
+        return {row["entity_id"] for row in rows}
+
     async def get_evidence_chunks(self, *, tenant: str, edge_id: str) -> list[dict[str, Any]]:
         """Return compact catalog references supporting a graph edge."""
         pool = self._require_pool()

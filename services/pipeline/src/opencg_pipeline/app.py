@@ -154,6 +154,7 @@ async def retrieve(req: RetrievalRequest) -> RetrievalResponse:
             span.set_attribute("dense_count", retr_tel["dense_count"])
             span.set_attribute("lexical_count", retr_tel["lexical_count"])
             span.set_attribute("fused_count", retr_tel["fused_count"])
+            span.set_attribute("tombstoned_filtered", retr_tel["tombstoned_filtered"])
             span.set_attribute("model", retr_tel["embed_model"])
             span.set_attribute("provider", "ollama")
             span.set_attribute("tokens_in", retr_tel["embed_tokens_in"])

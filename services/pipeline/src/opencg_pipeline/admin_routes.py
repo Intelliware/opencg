@@ -27,6 +27,8 @@ from opencg_shared import (
 )
 from pydantic import BaseModel, Field
 
+from opencg_pipeline.stages.hybrid_retrieval import drop_tombstoned, overfetch_limit
+
 router = APIRouter()
 
 _VECTOR_TOP_K_CAP = 100
@@ -113,7 +115,10 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         t0 = time.perf_counter()
         emb = await embeddings.embed(payload.query)
         hits = await vector_index.search_all(
-            vector=emb.vector, limit=payload.top_k, filters=payload.filters
+            vector=emb.vector, limit=overfetch_limit(payload.top_k), filters=payload.filters
+        )
+        hits, tombstoned_filtered = await drop_tombstoned(
+            hits, catalog=request.app.state.catalog, tenant=cfg.tenant, limit=payload.top_k
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
         span.set_attribute("model", emb.model)
@@ -121,6 +126,7 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         span.set_attribute("tokens_in", emb.tokens_in)
         span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("hits", len(hits))
+        span.set_attribute("tombstoned_filtered", tombstoned_filtered)
 
     record_stage_tokens(
         stage="vector_search",

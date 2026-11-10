@@ -15,7 +15,27 @@ from opencg_pipeline.storage.catalog import CatalogHit, CatalogStore
 from opencg_pipeline.storage.vector import VectorHit, VectorIndex
 from opencg_pipeline.util import reciprocal_rank_fusion
 
-__all__ = ["Candidate", "reciprocal_rank_fusion", "run"]
+__all__ = ["Candidate", "drop_tombstoned", "overfetch_limit", "reciprocal_rank_fusion", "run"]
+
+_OVERFETCH_CAP = 200
+
+
+def overfetch_limit(top_k: int) -> int:
+    """How many vector hits to request so dropping tombstoned ones still leaves top_k."""
+    return min(2 * top_k, max(top_k, _OVERFETCH_CAP))
+
+
+async def drop_tombstoned(
+    hits: list[VectorHit], *, catalog: CatalogStore, tenant: str, limit: int
+) -> tuple[list[VectorHit], int]:
+    """Keep hits whose catalogue row is live, in order, up to `limit`.
+
+    Tombstoning only marks the Postgres row; the Qdrant point is unchanged.
+    Returns (kept, number of tombstoned or missing hits dropped).
+    """
+    live = await catalog.live_entity_ids(tenant=tenant, entity_ids=[h.entity_id for h in hits])
+    kept = [h for h in hits if h.entity_id in live]
+    return kept[:limit], len(hits) - len(kept)
 
 
 @dataclass
@@ -46,17 +66,19 @@ async def run(
 
     # Dense leg: embed query, search Qdrant. Lexical leg: Postgres FTS+trgm.
     # Both run in parallel.
-    async def dense_leg() -> tuple[list[VectorHit], int, str]:
+    async def dense_leg() -> tuple[list[VectorHit], int, int, str]:
         emb = await embeddings.embed(query)
-        hits = await vector.search(sources=None, vector=emb.vector, limit=top_k)
-        return hits, emb.tokens_in, emb.model
+        hits = await vector.search(sources=None, vector=emb.vector, limit=overfetch_limit(top_k))
+        kept, dropped = await drop_tombstoned(hits, catalog=catalog, tenant=tenant, limit=top_k)
+        return kept, dropped, emb.tokens_in, emb.model
 
     async def lexical_leg() -> list[CatalogHit]:
         return await catalog.lexical_search(tenant=tenant, query=query, limit=top_k)
 
-    (dense_hits, embed_tokens_in, embed_model), lexical_hits = await asyncio.gather(
-        dense_leg(), lexical_leg()
-    )
+    (
+        (dense_hits, tombstoned_filtered, embed_tokens_in, embed_model),
+        lexical_hits,
+    ) = await asyncio.gather(dense_leg(), lexical_leg())
 
     dense_ranking = [h.entity_id for h in dense_hits]
     lexical_ranking = [h.entity_id for h in lexical_hits]
@@ -100,6 +122,7 @@ async def run(
         "dense_count": len(dense_hits),
         "lexical_count": len(lexical_hits),
         "fused_count": len(candidates),
+        "tombstoned_filtered": tombstoned_filtered,
         "embed_tokens_in": embed_tokens_in,
         "embed_model": embed_model,
     }

@@ -59,7 +59,7 @@
 - [x] 4.13 Fix the graph Concepts-tab search dropping `tab=concepts` (submitting it landed on the Map tab) (found during phase 4)
 - [x] 4.14 Fix the hydration mismatch (React #418) on entity detail pages: client-rendered dates differ between the server's and the browser's time zone; pin the e2e browser to a non-UTC zone so CI catches regressions (found during phase 4)
 - [x] 4.14a Fix a race on `/graph`: the map rewrote the URL with `history.replaceState` after its first traverse resolved, which overrode a sidebar navigation started during that fetch; it now syncs the URL before fetching (found during phase 4, by 4.12)
-- [ ] 4.15 Fix tombstoned chunks still served by vector search and `/retrieve` (found during phase 4). Edward chose a follow-up change: `exclude-tombstoned-from-retrieval` (proposed 2026-11-09, awaiting approval); this box closes when it ships
+- [x] 4.15 Fix tombstoned chunks still served by vector search and `/retrieve` (found during phase 4). Edward chose a follow-up change: `exclude-tombstoned-from-retrieval` (approved and implemented 2026-11-10); the `entities.spec.ts` `fixme` is now a real test
 - [ ] 4.16 Resolve the intermittent production-only hydration error (React #418, about 1 in 100 page loads, most often on the largest page, `/entities`; found during phase 4). It does not reproduce under `next dev`. The server and client renders of the page content are identical, and disabling streamed metadata (`htmlLimitedBots`) did not remove it. Until it is fixed, `navigation.spec.ts` reloads a route once when #418 is the only error and records a `flaky-hydration` annotation, so a deterministic mismatch still fails
 
 ## 5. Continuous integration
@@ -84,7 +84,7 @@
 
 ## 7. Documentation reconciliation
 
-- [ ] 7.1 README: fix the MCP port, the host-run path (`opencg-fabric`), the shipped and in-flight lists (`stabilize-full-smoke` is archived), the test table (add Playwright), and add CI and licence badges and a "Running the tests" section
+- [ ] 7.1 README: add a "Known issues" section (4.16 and the moderate advisories from 3.11), fix the MCP port, the host-run path (`opencg-fabric`), the shipped and in-flight lists (`stabilize-full-smoke` is archived), the test table (add Playwright), and add CI and licence badges and a "Running the tests" section
 - [ ] 7.2 Update the "In-flight changes" section in `AGENTS.md` / `CLAUDE.md` / `.cursor/rules/opencg.mdc` to match `openspec list`, keeping all three identical
 - [ ] 7.3 `docs/OPERATIONS.md`: bind address, host-port variables, admin gate, the smoke profile, and troubleshooting for a fresh clone
 - [ ] 7.4 Fill the `TBD` Purpose sections in `openspec/specs/*/spec.md`

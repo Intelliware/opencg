@@ -278,6 +278,25 @@ printf '%s' "$TS" | python3 -c \
   'import json,sys; assert json.load(sys.stdin).get("tombstoned_at")'
 pass "tombstoned current-run entity $ENTITY_ID"
 
+say "Verify the tombstoned chunk is no longer retrieved"
+AFTER="$(curl -fsS -X POST "$PIPELINE_URL/retrieve" \
+  -H 'content-type: application/json' \
+  -d "{
+    \"correlation_id\": \"smoke-$RUN_ID-after-tombstone\",
+    \"identity\": {\"principal\":\"local-dev\",\"roles\":[\"admin\",\"reader\"],\"tenant\":\"default\"},
+    \"tool\": \"retrieve_for_context\",
+    \"query\": \"amber-context protocol\",
+    \"top_k\": 10,
+    \"token_budget\": 2000
+  }")"
+printf '%s' "$AFTER" | python3 -c '
+import json, sys
+entity_id = sys.argv[1]
+returned = [item["entity_id"] for item in json.load(sys.stdin)["fragments"]]
+assert entity_id not in returned, f"tombstoned {entity_id} still retrieved: {returned}"
+' "$ENTITY_ID"
+pass "tombstoned entity excluded from /retrieve"
+
 say "Verify ingestion connector proxy"
 curl -fsS "$PIPELINE_URL/ingestion/connectors" | python3 -c '
 import json, sys

@@ -58,15 +58,24 @@ test("browse, paginate, open detail and lineage, then tombstone a run chunk", as
   });
 });
 
-// Tombstoning only marks the catalogue row; the Qdrant point stays, and both
-// /search/vector and the vector leg of /retrieve still return the chunk. The
-// catalog-store spec defers vector cleanup to a future change.
-test.fixme("a tombstoned chunk no longer appears in vector search", async ({ pipeline, run }) => {
+test("a tombstoned chunk no longer appears in vector search", async ({ page, pipeline, run }) => {
   const entities = await pipeline.runEntities(run.prefix);
-  const tombstoned = entities.find((item) => isCodeChunk(item.source_uri) && item.tombstoned_at);
-  expect(tombstoned).toBeTruthy();
-  const hits = await pipeline.vectorSearch("select context fragments", {
-    source_uri: tombstoned!.source_uri.split("#")[0],
-  });
-  expect(hits.hits.map((hit) => hit.entity_id)).not.toContain(tombstoned!.entity_id);
+  const chunks = entities.filter((item) => isCodeChunk(item.source_uri));
+  const victim = chunks.find((item) => !item.tombstoned_at) ?? chunks[0];
+  const parentUri = victim.source_uri.split("#")[0];
+  const search = async () =>
+    (await pipeline.vectorSearch("select context fragments", { source_uri: parentUri })).hits.map(
+      (hit) => hit.entity_id,
+    );
+
+  if (!victim.tombstoned_at) {
+    // Prove it is searchable first, then tombstone it through the UI.
+    expect(await search()).toContain(victim.entity_id);
+    await page.goto(`/entities/${victim.entity_id}`);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Tombstone", exact: true }).click();
+    await expect(page.getByText(/^Tombstoned at /)).toBeVisible();
+  }
+
+  expect(await search()).not.toContain(victim.entity_id);
 });
