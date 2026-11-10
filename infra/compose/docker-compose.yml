@@ -76,7 +76,7 @@ services:
   # -----------------------------------------------------------------------
   # Embeddings backend (local Ollama; Cloud is documented but unused in v0
   # because /api/embed is gated for the reference account — see
-  # openspec/changes/bootstrap-thin-mvp/design.md D1).
+  # openspec/changes/archive/2026-11-10-bootstrap-thin-mvp/design.md D1).
   # -----------------------------------------------------------------------
   ollama:
     image: ollama/ollama:0.30.7

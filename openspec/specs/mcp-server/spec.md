@@ -1,7 +1,9 @@
 # mcp-server Specification
 
 ## Purpose
-TBD - created by archiving change add-knowledge-graph. Update Purpose after archive.
+
+Expose openCG's retrieval and graph tools to AI clients over the Model Context Protocol, through stdio and Streamable HTTP, with optional bearer-token and stopgap OAuth authorization for remote use.
+
 ## Requirements
 ### Requirement: MCP tool surface
 

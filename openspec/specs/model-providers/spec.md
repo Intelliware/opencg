@@ -1,7 +1,9 @@
 # model-providers Specification
 
 ## Purpose
-TBD - created by archiving change add-knowledge-graph. Update Purpose after archive.
+
+Give every model call (embeddings and chat) a provider-agnostic adapter, configured per purpose, with Ollama as the default backend for both local and hosted models.
+
 ## Requirements
 ### Requirement: Provider-agnostic adapter interface
 

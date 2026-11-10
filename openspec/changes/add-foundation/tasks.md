@@ -1,6 +1,6 @@
 ## Implementation strategy
 
-**The thin-MVP subset has been split out into its own OpenSpec change: [`bootstrap-thin-mvp`](../bootstrap-thin-mvp/proposal.md).** That change is the authoritative contract for the first end-to-end working slice. This `add-foundation` change remains the canonical record of the full v0 vision; the deferred capability subsets it describes (full knowledge graph, intent classifier, rerank+compress, OPA enforcement, additional connectors, enrichment workers, full admin UI, OTel/Grafana stack, `local-prod` profile) will each be picked up by their own follow-up changes that MODIFY the requirements `bootstrap-thin-mvp` set.
+**The thin-MVP subset has been split out into its own OpenSpec change: [`bootstrap-thin-mvp`](../archive/2026-11-10-bootstrap-thin-mvp/proposal.md).** That change is the authoritative contract for the first end-to-end working slice. This `add-foundation` change remains the canonical record of the full v0 vision; the deferred capability subsets it describes (full knowledge graph, intent classifier, rerank+compress, OPA enforcement, additional connectors, enrichment workers, full admin UI, OTel/Grafana stack, `local-prod` profile) will each be picked up by their own follow-up changes that MODIFY the requirements `bootstrap-thin-mvp` set.
 
 ## 1. Repository scaffolding
 

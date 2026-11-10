@@ -1,7 +1,9 @@
 # project-conventions Specification
 
 ## Purpose
-TBD - created by archiving change rename-to-opencg. Update Purpose after archive.
+
+Fix the project's canonical name, identifiers and namespaces (Open Context Graph, openCG, `opencg`), so code, configuration, packages and docs use them consistently.
+
 ## Requirements
 ### Requirement: Canonical project naming and namespaces
 

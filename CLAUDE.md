@@ -25,7 +25,7 @@ This applies to:
 5. `openspec validate <name> --strict` — MUST pass before you proceed
 6. **Stop and show the user the proposal for explicit approval before implementing**
 7. Implement phase by phase. Run tests as you go.
-8. Run the smoke against the live stack (`bash tests/smoke/run.sh`)
+8. Run the smoke and e2e suites against the live stack (`make smoke`, `make e2e`)
 9. Commit + push
 
 **Exception**: tiny fixes that don't change a requirement or scenario (typo, lint, dependency bump, perf tweak in an existing function) are code-only OK. When in doubt, write the proposal.
@@ -35,11 +35,11 @@ This applies to:
 ## In-flight changes
 
 ```
-add-foundation                   104 tasks  — full v0 vision (canonical aspiration; superseded per-capability by follow-ups)
-bootstrap-thin-mvp               87 tasks    — original thin-MVP contract (SHIPPED)
-add-admin-vector-and-content     44 tasks    — admin vector / entity / ingestion pages (SHIPPED)
-add-knowledge-graph              52 tasks    — concepts, relationships, extraction, traversal (SPECCED; impl pending)
+prepare-open-source-release   — fresh-clone fixes, safe defaults, Playwright e2e, CI, community files (IN PROGRESS)
+add-foundation                — full v0 vision (canonical aspiration; delivered per capability by follow-up changes)
 ```
+
+Everything else has shipped and is archived under `openspec/changes/archive/` (including `bootstrap-thin-mvp`, archived as superseded); the merged baseline is in `openspec/specs/`.
 
 Check the live state any time with `openspec list`.
 
@@ -54,10 +54,10 @@ Check the live state any time with `openspec list`.
 | Catalog + audit + graph | PostgreSQL 16 + Apache AGE (graph extension) |
 | Cache | Valkey |
 | Embeddings | Ollama (compose-internal `ollama` service, default `nomic-embed-text`) |
-| Chat / generation | Ollama Cloud (`gemma3:4b` default, used by upcoming knowledge-graph extraction) |
+| Chat / generation | Ollama Cloud (`gemma3:4b` default, used by knowledge-graph text extraction) |
 | Admin UI | Next.js 15 App Router |
 | Storybook | **`@storybook/react-vite`** (NOT `@storybook/nextjs`) |
-| Tests | pytest, vitest |
+| Tests | pytest, vitest, Playwright (admin UI e2e) |
 | Compose | Docker, `dev` profile only |
 
 ## Project conventions
@@ -69,7 +69,7 @@ Check the live state any time with `openspec list`.
 - **Compose ports**: use `${OPENCG__SERVICE__HOST_PORT:-default}` so collisions can be dodged via `.env`.
 - **Audit logs are append-only**: enforced by triggers on `opencg.audit_log` and `opencg.graph_audit_log`. Don't UPDATE them; write a state-transition row instead.
 - **Token accounting on every model call**: emit an OTel span attribute AND increment `opencg_tokens_total{stage,model,provider,tenant,direction}`. The spec's "per-stage token accounting" requirement is non-negotiable.
-- **Best-effort extraction**: ingest-time chat-model calls (the upcoming knowledge-graph extractor) MUST NOT fail the ingest on extractor errors. Log + counter + continue.
+- **Best-effort extraction**: ingest-time chat-model calls (the knowledge-graph text extractor) MUST NOT fail the ingest on extractor errors. Log + counter + continue.
 
 ## Where stuff lives
 
@@ -86,14 +86,16 @@ services/admin-ui/                  Next.js 15 admin UI + Storybook
 infra/postgres/                     Dockerfile + init SQL (010_, 020_, ...)
 infra/ollama/                       entrypoint + healthcheck scripts
 infra/compose/docker-compose.yml    the v0 dev profile
-tests/smoke/run.sh                  end-to-end smoke
+tests/smoke/run.sh                  end-to-end smoke (helpers in tests/smoke/lib.sh)
+services/admin-ui/e2e/              Playwright e2e suite (make e2e)
+.github/                            CI workflow, Dependabot, ruleset, templates
 docs/OPERATIONS.md                  operator runbook
 ```
 
 ## Secrets
 
 - `.env` is gitignored. NEVER commit it.
-- The Ollama Cloud API key in `.env` is **chat-only** — Cloud's `/api/embed` is gated on the reference account (probe documented in `openspec/changes/bootstrap-thin-mvp/design.md` D1). Don't try to use it for embeddings.
+- The Ollama Cloud API key in `.env` is **chat-only** — Cloud's `/api/embed` is gated on the reference account (probe documented in `openspec/changes/archive/2026-11-10-bootstrap-thin-mvp/design.md` D1). Don't try to use it for embeddings.
 - Run `git diff --cached | grep -iE "bearer [a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,}|<your-known-key>"` before pushing.
 
 ## Quickstart
@@ -102,11 +104,11 @@ docs/OPERATIONS.md                  operator runbook
 cp .env.example .env
 make up-d                                                    # build + start
 make ingest-git REPO=https://github.com/anthropics/anthropic-cookbook
-bash tests/smoke/run.sh                                      # e2e verification
+make smoke && make e2e                                       # end-to-end verification
 open http://localhost:3000                                   # admin UI
 ```
 
-Admin UI pages: `/queries`, `/vectors`, `/entities`, `/ingestion`. (`/graph` once `add-knowledge-graph` ships.)
+Admin UI pages: `/` (overview), `/graph`, `/vectors`, `/entities`, `/queries`, `/ingestion`.
 
 ## Common gotchas (learned the hard way)
 
@@ -130,7 +132,7 @@ openspec validate <name> --strict              # MUST pass before implementation
 openspec status --change <name>                # progress
 ```
 
-When you finish implementing a change, the workflow ends with `openspec archive <name>` (consult the OpenSpec skill files in `.claude/skills/openspec-archive-change/` for the full procedure — we haven't archived anything yet, so be careful the first time).
+When you finish implementing a change, the workflow ends with `openspec archive <name>` (consult the OpenSpec skill files in `.claude/skills/openspec-archive-change/` for the full procedure). It merges the change's spec deltas into `openspec/specs/`; use `--skip-specs` only for a change archived as superseded.
 
 ## When in doubt
 

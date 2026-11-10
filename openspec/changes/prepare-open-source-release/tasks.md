@@ -30,6 +30,7 @@
 
 - [x] 3.1 Bind every published port to `${OPENCG__BIND_ADDRESS:-127.0.0.1}` using `${OPENCG__<SVC>__HOST_PORT:-default}`, as the project convention requires
 - [x] 3.2 Move the Postgres user, password and database into `.env` / `.env.example`; derive `OPENCG__POSTGRES__URL` from them
+- [x] 3.2a Grant the init-script privileges to `CURRENT_USER` instead of the hard-coded `opencg` role: with a non-default `OPENCG__POSTGRES__USER` (made configurable by 3.2), initialisation stopped at `040_graph.sql` with `role "opencg" does not exist`. Verified that both `acme` and `opencg` initialise with zero errors and an identical schema (found during phase 7)
 - [x] 3.3 Default the MCP host port to 8181 so it matches the docs (container port stays 8080)
 - [x] 3.4 Move `smoke-chat` and the ingestion fixture mount into a `smoke` profile; have `make smoke` / `make e2e` enable it
 - [x] 3.5 Validate the ingestion "Run now" URL (allow-list `https://`, `git://` and the fixture path; reject `file://` and internal hosts) to limit SSRF
@@ -87,11 +88,11 @@
 
 ## 7. Documentation reconciliation
 
-- [ ] 7.1 README: add a "Known issues" section (4.16 and the moderate advisories from 3.11), fix the MCP port, the host-run path (`opencg-fabric`), the shipped and in-flight lists (`stabilize-full-smoke` is archived), the test table (add Playwright), and add CI and licence badges and a "Running the tests" section
-- [ ] 7.2 Update the "In-flight changes" section in `AGENTS.md` / `CLAUDE.md` / `.cursor/rules/opencg.mdc` to match `openspec list`, keeping all three identical
-- [ ] 7.3 `docs/OPERATIONS.md`: bind address, host-port variables, admin gate, the smoke profile, and troubleshooting for a fresh clone
-- [ ] 7.4 Fill the `TBD` Purpose sections in `openspec/specs/*/spec.md`
-- [ ] 7.5 Archive `bootstrap-thin-mvp` as superseded, recording which follow-up changes cover its open tasks
+- [x] 7.1 README: add a "Known issues" section (4.16 and the moderate advisories from 3.11), fix the MCP port, the host-run path (`opencg-fabric`), the shipped and in-flight lists (`stabilize-full-smoke` is archived), the test table (add Playwright), and add CI and licence badges and a "Running the tests" section. Per Edward's README rule, also added: the version (0.1.0, unreleased), shipped changes with their dates, an API reference for every service, the full database schema (Postgres, Qdrant, Valkey), the key business rules, and Known issues. Writing the schema section found that the audit log has only its default partition, so the "partitioned by week" claims were corrected, and that ingestion serves no `/metrics`, which is now listed as a known issue
+- [x] 7.2 Update the "In-flight changes" section in `AGENTS.md` / `CLAUDE.md` / `.cursor/rules/opencg.mdc` to match `openspec list`, keeping all three identical
+- [x] 7.3 `docs/OPERATIONS.md`: bind address, host-port variables, admin gate, the smoke profile, and troubleshooting for a fresh clone
+- [x] 7.4 Fill the `TBD` Purpose sections in `openspec/specs/*/spec.md`
+- [x] 7.5 Archive `bootstrap-thin-mvp` as superseded, recording which follow-up changes cover its open tasks
 
 ## 8. Verification and release
 

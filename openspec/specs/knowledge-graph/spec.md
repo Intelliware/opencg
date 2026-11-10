@@ -1,7 +1,9 @@
 # knowledge-graph Specification
 
 ## Purpose
-TBD - created by archiving change adopt-graphifyy. Update Purpose after archive.
+
+Maintain a named-relationship knowledge graph over the catalogue: deterministic code graphs from graphifyy, best-effort concept and relationship extraction from text, an editable relationship vocabulary, operator review of candidate relationships, evidence linking back to source chunks, and graph traversal.
+
 ## Requirements
 ### Requirement: Named relationship vocabulary
 
