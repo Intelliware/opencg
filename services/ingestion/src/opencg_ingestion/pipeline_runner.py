@@ -224,9 +224,7 @@ async def ingest_documents(
                         graphify_result=code_graph,
                     )
                 except Exception as exc:
-                    log.warning(
-                        "graph_writer failed for %s: %s", doc.source_uri, exc
-                    )
+                    log.warning("graph_writer failed for %s: %s", doc.source_uri, exc)
     finally:
         await catalog.close()
         await vector.close()
@@ -297,7 +295,9 @@ async def _extract_code(
     with tracer.start_as_current_span("pipeline.graph_extract_code") as span:
         span.set_attribute("model", "graphifyy")
         span.set_attribute("provider", "graphifyy")
-        span.set_attribute("extractor_version", f"graphifyy/{getattr(graphify, '__version__', '0.0.0')}")
+        span.set_attribute(
+            "extractor_version", f"graphifyy/{getattr(graphify, '__version__', '0.0.0')}"
+        )
         span.set_attribute("tokens_in", 0)
         span.set_attribute("tokens_out", 0)
         try:

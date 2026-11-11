@@ -39,7 +39,10 @@ class Chunk:
 
 
 def chunk_text(
-    text: str, *, target_chars: int = DEFAULT_TARGET_CHARS, overlap_chars: int = DEFAULT_OVERLAP_CHARS
+    text: str,
+    *,
+    target_chars: int = DEFAULT_TARGET_CHARS,
+    overlap_chars: int = DEFAULT_OVERLAP_CHARS,
 ) -> list[Chunk]:
     """Split text into ~target_chars windows with `overlap_chars` overlap.
 
@@ -90,9 +93,17 @@ def chunk_text(
 # they should flow through the paragraph chunker so embeddings see meaningful
 # text spans. Exclude them explicitly.
 _NON_CODE_EXTS_IN_DISPATCH = {
-    ".md", ".markdown", ".rst", ".txt",
-    ".yaml", ".yml", ".toml", ".json", ".ini",
-    ".html", ".htm",
+    ".md",
+    ".markdown",
+    ".rst",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".json",
+    ".ini",
+    ".html",
+    ".htm",
 }
 
 
@@ -168,7 +179,7 @@ def chunk_code_by_symbols(
     """
     try:
         result = gex.extract([path], parallel=False)
-    except Exception as exc:  # noqa: BLE001 — best-effort per-file extraction
+    except Exception as exc:
         log.warning("graphifyy.extract failed on %s: %s; falling back to text", path, exc)
         return chunk_text(source_text, target_chars=target_chars, overlap_chars=overlap_chars)
 
@@ -179,10 +190,16 @@ def chunk_code_by_symbols(
     ]
     # Drop the top-level module node — its body is the whole file, which
     # would duplicate every symbol chunk inside it.
-    symbol_nodes = [n for n in raw_nodes if (n.get("label") or "") not in ("", path.stem + path.suffix)]
+    symbol_nodes = [
+        n for n in raw_nodes if (n.get("label") or "") not in ("", path.stem + path.suffix)
+    ]
     # graphifyy labels the module-level node as the bare filename or the
     # module stem. Filter both shapes.
-    symbol_nodes = [n for n in symbol_nodes if n.get("source_location") != "L1" or _symbol_kind(n.get("label", "")) != "module"]
+    symbol_nodes = [
+        n
+        for n in symbol_nodes
+        if n.get("source_location") != "L1" or _symbol_kind(n.get("label", "")) != "module"
+    ]
 
     if not symbol_nodes:
         return chunk_text(source_text, target_chars=target_chars, overlap_chars=overlap_chars)
@@ -239,7 +256,9 @@ def chunk_code_by_symbols(
         meta = {
             "symbol_ids": pending_ids,
             "symbol_id": pending_ids[0],
-            "symbol_kind": "merged" if len(pending_ids) > 1 else _symbol_kind(pending[0].get("label", "")),
+            "symbol_kind": "merged"
+            if len(pending_ids) > 1
+            else _symbol_kind(pending[0].get("label", "")),
             "start_line": pending[0]["_start_line"],
             "end_line": pending[-1]["_end_line"],
             "extractor_version": _extractor_version(),

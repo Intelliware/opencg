@@ -90,5 +90,5 @@ END
 $$;
 
 -- Grants for the application user.
-GRANT SELECT, INSERT ON opencg.graph_audit_log TO opencg;
-GRANT USAGE, SELECT ON opencg.graph_audit_log_id_seq TO opencg;
+GRANT SELECT, INSERT ON opencg.graph_audit_log TO CURRENT_USER;
+GRANT USAGE, SELECT ON opencg.graph_audit_log_id_seq TO CURRENT_USER;

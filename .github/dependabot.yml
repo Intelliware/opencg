@@ -1,0 +1,44 @@
+version: 2
+
+# Weekly, with minor and patch bumps grouped per ecosystem to keep the PR count
+# low. Security updates are raised individually as soon as an advisory lands.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories:
+      - /services/admin-ui
+      - /services/mcp-server
+      - /services/pipeline
+      - /services/ingestion
+      - /infra/postgres
+    schedule: { interval: weekly }
+    groups:
+      docker-base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker-compose
+    directory: /infra/compose
+    schedule: { interval: weekly }
+    groups:
+      compose-images:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      github-actions:
+        patterns: ["*"]

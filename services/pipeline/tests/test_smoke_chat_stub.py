@@ -14,7 +14,7 @@ def _load_stub_module():
     return module
 
 
-def test_smoke_chat_stub_returns_unique_schema_valid_relationship():
+def test_smoke_chat_stub_returns_unique_schema_valid_relationships():
     module = _load_stub_module()
 
     content = json.loads(module.build_content("Smoke run: run-123"))
@@ -30,5 +30,12 @@ def test_smoke_chat_stub_returns_unique_schema_valid_relationship():
             "to": "Context windows run-123",
             "evidence_span": "The openCG catalogue is related to context windows.",
             "confidence": 0.99,
-        }
+        },
+        {
+            "from": "Context windows run-123",
+            "relation": "derived_from",
+            "to": "Smoke catalogue run-123",
+            "evidence_span": "retrieval supplies only the evidence needed",
+            "confidence": 0.9,
+        },
     ]

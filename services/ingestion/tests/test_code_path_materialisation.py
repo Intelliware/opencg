@@ -19,7 +19,7 @@ from opencg_ingestion.connectors.git import GitDocument
 # A random-tempfile stem looks like ``tmp`` + base32-ish run of chars.
 _TMP_STEM = re.compile(r"tmp[a-z0-9]{6,}")
 
-_SAMPLE = '''import os
+_SAMPLE = """import os
 import re
 
 
@@ -29,7 +29,7 @@ def parse_registry(text):
 
 def title_of(path):
     return os.path.basename(path)
-'''
+"""
 
 
 def _doc(rel: str) -> GitDocument:
@@ -115,9 +115,7 @@ def test_materialised_path_sanitises_traversal():
 @pytest.mark.asyncio
 async def test_extract_code_names_reflect_real_path():
     doc = _doc("evals/checks.py")
-    chunks, graph = await pipeline_runner._extract_code(
-        _Tracer(), doc, Path("evals/checks.py")
-    )
+    chunks, graph = await pipeline_runner._extract_code(_Tracer(), doc, Path("evals/checks.py"))
     assert graph is not None
 
     labels = [str(n.get("label", "")) for n in graph.get("nodes", [])]

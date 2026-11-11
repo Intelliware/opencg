@@ -9,7 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _lock = threading.Lock()
-_requests = 0
+_stats = {"requests": 0}
 
 
 def build_content(user_text: str) -> str:
@@ -38,7 +38,16 @@ def build_content(user_text: str) -> str:
                     "to": context,
                     "evidence_span": "The openCG catalogue is related to context windows.",
                     "confidence": 0.99,
-                }
+                },
+                # A second candidate, so the e2e suite can promote one and
+                # reject the other; smoke promotes the higher-confidence one.
+                {
+                    "from": context,
+                    "relation": "derived_from",
+                    "to": catalogue,
+                    "evidence_span": "retrieval supplies only the evidence needed",
+                    "confidence": 0.9,
+                },
             ],
         }
     )
@@ -53,19 +62,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/healthz":
             self._json(200, {"status": "ok"})
             return
         if self.path == "/stats":
             with _lock:
-                count = _requests
+                count = _stats["requests"]
             self._json(200, {"chat_requests": count})
             return
         self._json(404, {"error": "not found"})
 
-    def do_POST(self) -> None:  # noqa: N802
-        global _requests
+    def do_POST(self) -> None:
         if self.path != "/api/chat":
             self._json(404, {"error": "not found"})
             return
@@ -73,11 +81,15 @@ class Handler(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(length) or b"{}")
         messages = request.get("messages") or []
         user_text = next(
-            (message.get("content", "") for message in reversed(messages) if message.get("role") == "user"),
+            (
+                message.get("content", "")
+                for message in reversed(messages)
+                if message.get("role") == "user"
+            ),
             "",
         )
         with _lock:
-            _requests += 1
+            _stats["requests"] += 1
         self._json(
             200,
             {

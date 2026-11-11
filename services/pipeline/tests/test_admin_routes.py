@@ -12,15 +12,12 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from opencg_shared import openCGConfig
-
 from opencg_pipeline import admin_routes
 from opencg_pipeline.providers import EmbeddingResult
 from opencg_pipeline.storage.vector import VectorHit
-
+from opencg_shared import openCGConfig
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -30,21 +27,25 @@ from opencg_pipeline.storage.vector import VectorHit
 @dataclass
 class FakeCatalog:
     list_result: tuple[list[dict[str, Any]], int] = (
-        ([{
-            "entity_id": "e1",
-            "tenant": "default",
-            "source": "git",
-            "source_uri": "git://x/y",
-            "title": "y",
-            "classification": "internal",
-            "freshness_state": "fresh",
-            "updated_at": datetime(2026, 6, 11),
-            "tombstoned_at": None,
-        }], 1)
+        [
+            {
+                "entity_id": "e1",
+                "tenant": "default",
+                "source": "git",
+                "source_uri": "git://x/y",
+                "title": "y",
+                "classification": "internal",
+                "freshness_state": "fresh",
+                "updated_at": datetime(2026, 6, 11),
+                "tombstoned_at": None,
+            }
+        ],
+        1,
     )
     get_result: dict[str, Any] | None = None
     tombstone_result: dict[str, Any] | None = None
     last_list_kwargs: dict[str, Any] | None = None
+    tombstoned: frozenset[str] = frozenset()
 
     async def list_entities(self, **kwargs):
         self.last_list_kwargs = kwargs
@@ -56,6 +57,9 @@ class FakeCatalog:
     async def tombstone(self, *, tenant: str, entity_id: str):
         return self.tombstone_result
 
+    async def live_entity_ids(self, *, tenant: str, entity_ids: list[str]) -> set[str]:
+        return {eid for eid in entity_ids if eid not in self.tombstoned}
+
 
 @dataclass
 class FakeEmbeddings:
@@ -66,8 +70,10 @@ class FakeEmbeddings:
 @dataclass
 class FakeVector:
     hits: list[VectorHit]
+    last_limit: int | None = None
 
-    async def search_all(self, *, vector, limit, filters=None):  # noqa: ARG002
+    async def search_all(self, *, vector, limit, filters=None):
+        self.last_limit = limit
         return self.hits[:limit]
 
 
@@ -80,18 +86,24 @@ class FakeAudit:
 
 
 class FakeTracer:
+    def __init__(self) -> None:
+        self.attributes: dict[str, Any] = {}
+
     class _Span:
+        def __init__(self, attributes: dict[str, Any]) -> None:
+            self._attributes = attributes
+
         def __enter__(self):
             return self
 
         def __exit__(self, *exc):
             return None
 
-        def set_attribute(self, *a, **k):
-            return None
+        def set_attribute(self, key, value):
+            self._attributes[key] = value
 
     def start_as_current_span(self, name: str):
-        return self._Span()
+        return self._Span(self.attributes)
 
 
 def _mount(
@@ -192,7 +204,11 @@ def test_get_entity_returns_lineage_and_audit_appearances():
             "lineage": {
                 "parent": None,
                 "children": [
-                    {"entity_id": "c1", "title": "file (chunk 0)", "source_uri": "git://x/file#chunk=0"}
+                    {
+                        "entity_id": "c1",
+                        "title": "file (chunk 0)",
+                        "source_uri": "git://x/file#chunk=0",
+                    }
                 ],
             },
         }
@@ -292,6 +308,41 @@ def test_vector_search_happy_path():
     assert body["hits"][0]["collection"] == "default__git"
     # Snippet is normalised and length-capped.
     assert "snippet" in body["hits"][0]
+
+
+def _vhit(eid: str, score: float) -> VectorHit:
+    return VectorHit(
+        entity_id=eid,
+        score=score,
+        payload={"source": "git", "source_uri": f"git://x/{eid}", "text": eid},
+        collection="default__git",
+    )
+
+
+def test_vector_search_drops_tombstoned_entities():
+    vector = FakeVector(hits=[_vhit("live", 0.9), _vhit("dead", 0.8)])
+    client = _mount(vector=vector, catalog=FakeCatalog(tombstoned=frozenset({"dead"})))
+
+    resp = client.post("/search/vector", json={"query": "hello", "top_k": 10})
+
+    assert resp.status_code == 200
+    assert [h["entity_id"] for h in resp.json()["hits"]] == ["live"]
+    assert client.app.state.tracer.attributes["tombstoned_filtered"] == 1
+
+
+def test_vector_search_refills_top_k_from_the_overfetch():
+    hits = [_vhit(f"e{i:02d}", 1 - i / 100) for i in range(20)]
+    tombstoned = frozenset({"e01", "e04", "e07"})
+    vector = FakeVector(hits=hits)
+    client = _mount(vector=vector, catalog=FakeCatalog(tombstoned=tombstoned))
+
+    resp = client.post("/search/vector", json={"query": "hello", "top_k": 10})
+
+    ids = [h["entity_id"] for h in resp.json()["hits"]]
+    assert vector.last_limit == 20
+    assert len(ids) == 10
+    assert not tombstoned & set(ids)
+    assert ids == sorted(ids)  # score order preserved
 
 
 def test_vector_search_rejects_top_k_cap_violation():

@@ -5,15 +5,14 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-
 from opencg_pipeline.storage.catalog import CatalogStore
 
 
 class _Acquire:
-    def __init__(self, conn: "_Conn") -> None:
+    def __init__(self, conn: _Conn) -> None:
         self._conn = conn
 
-    async def __aenter__(self) -> "_Conn":
+    async def __aenter__(self) -> _Conn:
         return self._conn
 
     async def __aexit__(self, *exc: object) -> None:
@@ -144,9 +143,7 @@ async def test_get_entity_with_lineage_parent_and_children():
         fetchrow_rows=[chunk_row, parent_ref],
         fetch_rows=[[]],  # no children
     )
-    out = await _store_with(conn).get_entity_with_lineage(
-        tenant="default", entity_id="c1"
-    )
+    out = await _store_with(conn).get_entity_with_lineage(tenant="default", entity_id="c1")
 
     assert out is not None
     assert out["entity_id"] == "c1"
@@ -183,9 +180,7 @@ async def test_get_entity_with_lineage_parent_with_chunks():
     ]
     conn = _Conn(fetchrow_rows=[parent_row], fetch_rows=[children])
 
-    out = await _store_with(conn).get_entity_with_lineage(
-        tenant="default", entity_id="p1"
-    )
+    out = await _store_with(conn).get_entity_with_lineage(tenant="default", entity_id="p1")
 
     assert out is not None
     assert out["lineage"]["parent"] is None
@@ -196,9 +191,7 @@ async def test_get_entity_with_lineage_parent_with_chunks():
 @pytest.mark.asyncio
 async def test_get_entity_with_lineage_missing_returns_none():
     conn = _Conn(fetchrow_rows=[None])
-    out = await _store_with(conn).get_entity_with_lineage(
-        tenant="default", entity_id="missing"
-    )
+    out = await _store_with(conn).get_entity_with_lineage(tenant="default", entity_id="missing")
     assert out is None
 
 
@@ -245,9 +238,7 @@ async def test_get_evidence_chunks_returns_entity_refs():
             ]
         ]
     )
-    rows = await _store_with(conn).get_evidence_chunks(
-        tenant="default", edge_id="edge-1"
-    )
+    rows = await _store_with(conn).get_evidence_chunks(tenant="default", edge_id="edge-1")
 
     assert rows == [
         {
@@ -257,3 +248,22 @@ async def test_get_evidence_chunks_returns_entity_refs():
         }
     ]
     assert conn.calls[0][2] == ("default", "edge-1")
+
+
+@pytest.mark.asyncio
+async def test_live_entity_ids_returns_untombstoned_subset():
+    conn = _Conn(fetch_rows=[[{"entity_id": "a"}]])
+    live = await _store_with(conn).live_entity_ids(tenant="default", entity_ids=["a", "b", "c"])
+
+    assert live == {"a"}
+    kind, sql, args = conn.calls[0]
+    assert kind == "fetch"
+    assert "entity_id = ANY($2::uuid[])" in sql
+    assert "tombstoned_at IS NULL" in sql
+    assert args == ("default", ["a", "b", "c"])
+
+
+@pytest.mark.asyncio
+async def test_live_entity_ids_empty_input_skips_the_database():
+    store = CatalogStore("postgresql://unused")
+    assert await store.live_entity_ids(tenant="default", entity_ids=[]) == set()

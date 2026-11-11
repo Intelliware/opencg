@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const BODY_PREVIEW_CHARS = 50_000;
 
+// SSR formats dates in the server's time zone but this component hydrates in the
+// browser's, so date-bearing elements suppress the text mismatch (React #418).
 function Pair({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -16,6 +18,7 @@ function Pair({ label, value }: { label: string; value: React.ReactNode }) {
           "break-all text-sm",
           typeof value === "string" && value.length > 20 && "font-mono",
         )}
+        suppressHydrationWarning
       >
         {value}
       </div>
@@ -47,7 +50,7 @@ export function EntityDetail({
           {entity.title ?? entity.source_uri}
         </h2>
         {tombstoned ? (
-          <Badge variant="destructive">
+          <Badge variant="destructive" suppressHydrationWarning>
             Tombstoned at {new Date(entity.tombstoned_at as string).toLocaleString()}
           </Badge>
         ) : null}
@@ -158,7 +161,7 @@ export function EntityDetail({
                 >
                   {appearance.query || appearance.tool}
                 </a>{" "}
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground" suppressHydrationWarning>
                   {new Date(appearance.created_at).toLocaleString()} ·{" "}
                   {appearance.outcome}
                 </span>

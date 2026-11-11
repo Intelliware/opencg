@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-
 from opencg_pipeline.storage.vector import VectorIndex
 
 
@@ -50,7 +49,7 @@ class _FakeQdrant:
         points = self._per_collection.get(collection_name, [])
         return _QueryResult(points=points[:limit])
 
-    async def collection_exists(self, name: str) -> bool:  # noqa: ARG002
+    async def collection_exists(self, name: str) -> bool:
         return True
 
 
@@ -136,8 +135,6 @@ async def test_search_all_with_filter_pushes_down():
         collections=["default__git"],
         per_collection={"default__git": [_Point(id="g1", score=0.9, payload={})]},
     )
-    await _vi_with(fake).search_all(
-        vector=[0.0] * 4, limit=5, filters={"source": "git"}
-    )
+    await _vi_with(fake).search_all(vector=[0.0] * 4, limit=5, filters={"source": "git"})
     _, kwargs = fake.queries[0]
     assert kwargs["filter"] is not None

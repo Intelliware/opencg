@@ -94,9 +94,7 @@ class GraphStore:
             )
         return [dict(row) for row in rows], int(total or 0)
 
-    async def get_concept(
-        self, *, tenant: str, concept_id: str
-    ) -> dict[str, Any] | None:
+    async def get_concept(self, *, tenant: str, concept_id: str) -> dict[str, Any] | None:
         async with self._require_pool().acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -305,10 +303,7 @@ class GraphStore:
                 tenant,
                 candidate_ids,
             )
-            node_by_id = {
-                str(row["concept_id"]): dict(row)
-                for row in candidate_nodes
-            }
+            node_by_id = {str(row["concept_id"]): dict(row) for row in candidate_nodes}
             active_ids = list(node_by_id)
             edge_rows = await conn.fetch(
                 """
@@ -411,7 +406,11 @@ class GraphStore:
         reason: str | None,
         changes: dict[str, Any],
     ) -> dict[str, Any] | None:
-        allowed = {key: value for key, value in changes.items() if key in {"name", "description", "aliases"}}
+        allowed = {
+            key: value
+            for key, value in changes.items()
+            if key in {"name", "description", "aliases"}
+        }
         if not allowed:
             raise ValueError("no editable concept fields supplied")
         async with self._require_pool().acquire() as conn:

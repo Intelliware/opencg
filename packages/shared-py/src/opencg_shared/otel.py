@@ -33,7 +33,7 @@ def setup_otel(service_name: str, namespace: str = "opencg") -> trace.Tracer:
         try:
             exporter = OTLPSpanExporter(endpoint=f"{endpoint.rstrip('/')}/v1/traces")
             provider.add_span_processor(BatchSpanProcessor(exporter))
-        except Exception as exc:  # noqa: BLE001 — best-effort during boot
+        except Exception as exc:
             log.warning("OTel exporter init failed: %s", exc)
     trace.set_tracer_provider(provider)
     return trace.get_tracer(service_name)

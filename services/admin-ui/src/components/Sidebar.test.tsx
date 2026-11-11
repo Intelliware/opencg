@@ -13,4 +13,13 @@ describe("Sidebar", () => {
     expect(labels).toEqual(["Overview", "Graph", "Vectors", "Entities", "Queries", "Ingestion"]);
     expect(labels[1]).toBe("Graph");
   });
+
+  it("shows a sign-out control only when the access gate is enabled", () => {
+    const { unmount } = render(<Sidebar />);
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    unmount();
+    render(<Sidebar signOut />);
+    const button = screen.getByRole("button", { name: "Sign out" });
+    expect(button.closest("form")).toHaveAttribute("action", "/api/auth/logout");
+  });
 });

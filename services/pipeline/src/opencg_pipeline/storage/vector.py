@@ -24,7 +24,9 @@ class VectorIndex:
         self._client = AsyncQdrantClient(url=url)
         self._prefix = collection_prefix
         self._vector_size = vector_size
-        self._distance = models.Distance.COSINE if distance.lower() == "cosine" else models.Distance.DOT
+        self._distance = (
+            models.Distance.COSINE if distance.lower() == "cosine" else models.Distance.DOT
+        )
 
     def _collection(self, source: str) -> str:
         return f"{self._prefix}{source}"
@@ -34,9 +36,7 @@ class VectorIndex:
         if not await self._client.collection_exists(coll):
             await self._client.create_collection(
                 collection_name=coll,
-                vectors_config=models.VectorParams(
-                    size=self._vector_size, distance=self._distance
-                ),
+                vectors_config=models.VectorParams(size=self._vector_size, distance=self._distance),
             )
 
     async def upsert(
@@ -103,9 +103,7 @@ class VectorIndex:
         """
         all_collections = (await self._client.get_collections()).collections
         target_names = [
-            c.name
-            for c in all_collections
-            if not self._prefix or c.name.startswith(self._prefix)
+            c.name for c in all_collections if not self._prefix or c.name.startswith(self._prefix)
         ]
 
         qfilter = self._build_filter(filters)

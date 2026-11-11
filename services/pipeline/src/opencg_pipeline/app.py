@@ -11,13 +11,13 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from opencg_shared import (
     ContextFragment,
-    openCGConfig,
     RetrievalRequest,
     RetrievalResponse,
     StageUsage,
     UsageEnvelope,
     load_config,
     metrics_app,
+    openCGConfig,
     record_request,
     record_stage_tokens,
     setup_otel,
@@ -100,11 +100,11 @@ async def readyz() -> dict:
     try:
         async with app.state.catalog._require_pool().acquire() as conn:  # type: ignore[attr-defined]
             await conn.execute("SELECT 1")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"postgres: {exc}") from exc
     try:
-        await app.state.vector._client.get_collections()  # noqa: SLF001
-    except Exception as exc:  # noqa: BLE001
+        await app.state.vector._client.get_collections()
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"qdrant: {exc}") from exc
     return {
         "status": "ready",
@@ -154,6 +154,7 @@ async def retrieve(req: RetrievalRequest) -> RetrievalResponse:
             span.set_attribute("dense_count", retr_tel["dense_count"])
             span.set_attribute("lexical_count", retr_tel["lexical_count"])
             span.set_attribute("fused_count", retr_tel["fused_count"])
+            span.set_attribute("tombstoned_filtered", retr_tel["tombstoned_filtered"])
             span.set_attribute("model", retr_tel["embed_model"])
             span.set_attribute("provider", "ollama")
             span.set_attribute("tokens_in", retr_tel["embed_tokens_in"])

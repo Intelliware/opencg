@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in openCG doesn't work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Security problems go through private reporting instead** (see SECURITY.md), not a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands, requests or UI steps, starting from a running stack if possible.
+      placeholder: |
+        1. make up-d
+        2. make ingest-git REPO=…
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Admin UI
+        - MCP server
+        - Pipeline (retrieval, graph, vector search)
+        - Ingestion
+        - Compose / Docker images
+        - Tests, CI or tooling
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: A release tag, or the output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker and Compose versions, and any non-default `.env` settings. **Remove every secret.**
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from `make logs`, `make smoke` or the browser console.
+      render: shell

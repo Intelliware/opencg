@@ -7,14 +7,13 @@ the routing + background-task orchestration only.
 from __future__ import annotations
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
-from opencg_shared import openCGConfig
-
 from opencg_ingestion import server as srv
 from opencg_ingestion.runs import RunStore
+from opencg_shared import openCGConfig
 
 
 @pytest.fixture
@@ -35,7 +34,10 @@ def make_client(monkeypatch):
         monkeypatch.setattr(srv, "ingest_run", chosen_ingest)
         # Pre-populate the state the lifespan would normally set up so we can
         # use a synchronous TestClient without spinning up Postgres.
-        app.state.cfg = openCGConfig()
+        # example.com is allow-listed so tests never depend on live DNS.
+        app.state.cfg = openCGConfig.model_validate(
+            {"ingestion": {"git": {"allowed_hosts": ["example.com"]}}}
+        )
         app.state.runs = RunStore(cap=10)
         return TestClient(app)
 
@@ -91,6 +93,7 @@ def test_run_git_failure_records_error(make_client):
     listed = client.get("/runs/recent").json()
     while listed[0]["status"] not in ("succeeded", "failed") and time.monotonic() < deadline:
         listed = client.get("/runs/recent").json()
+    assert listed[0]["run_id"] == run_id
     assert listed[0]["status"] == "failed"
     assert "clone refused" in (listed[0]["error"] or "")
 
@@ -99,3 +102,15 @@ def test_run_git_validates_repo_url(make_client):
     client = make_client()
     resp = client.post("/run/git", json={"repo_url": "x"})
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "repo_url",
+    ["--upload-pack=touch /tmp/x", "file:///etc", "http://example.com/x.git", "/etc/passwd"],
+)
+def test_run_git_rejects_unsafe_repo_url_without_creating_a_run(make_client, repo_url):
+    client = make_client()
+    resp = client.post("/run/git", json={"repo_url": repo_url})
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "repo_url_rejected"
+    assert client.get("/runs/recent").json() == []

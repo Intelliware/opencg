@@ -147,15 +147,34 @@ export async function listRecentRuns(): Promise<IngestionRun[]> {
   return (await res.json()) as IngestionRun[];
 }
 
-export async function runGit(repoUrl: string): Promise<IngestionRun | null> {
-  const res = await fetch(`${PIPELINE_URL}/ingestion/git/run`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ repo_url: repoUrl }),
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as IngestionRun;
+export type RunGitResult =
+  | { ok: true; run: IngestionRun }
+  | { ok: false; status: number; message: string };
+
+// The ingestion service validates repository URLs (scheme, host, local roots)
+// and explains rejections; surface that message instead of a bare status.
+export async function runGit(repoUrl: string): Promise<RunGitResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${PIPELINE_URL}/ingestion/git/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo_url: repoUrl }),
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, status: 502, message: "Pipeline is unreachable." };
+  }
+  if (res.ok) return { ok: true, run: (await res.json()) as IngestionRun };
+  let message = `Run failed (${res.status})`;
+  try {
+    const body = (await res.json()) as { detail?: { message?: string; detail?: { message?: string } } };
+    // Pipeline forwards ingestion 4xx as {detail: <ingestion body>}.
+    message = body.detail?.detail?.message ?? body.detail?.message ?? message;
+  } catch {
+    // Non-JSON error body: keep the status-only message.
+  }
+  return { ok: false, status: res.status >= 500 ? 502 : res.status, message };
 }
 
 // --- Knowledge graph ------------------------------------------------------

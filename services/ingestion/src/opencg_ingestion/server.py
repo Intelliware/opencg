@@ -17,20 +17,21 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from opencg_pipeline.providers import OllamaEmbeddings
+from opencg_pipeline.storage.catalog import CatalogStore
 from opencg_shared import (
     ConnectorStatus,
-    openCGConfig,
     IngestionRun,
     load_config,
+    openCGConfig,
     setup_otel,
 )
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 
 from opencg_ingestion.pipeline_runner import run as ingest_run
+from opencg_ingestion.repo_url import RepoUrlError, validate_repo_url
 from opencg_ingestion.runs import RunStore
-from opencg_pipeline.providers import OllamaEmbeddings
-from opencg_pipeline.storage.catalog import CatalogStore
 
 log = logging.getLogger(__name__)
 
@@ -73,13 +74,13 @@ async def readyz() -> dict:
     try:
         async with app.state.catalog._require_pool().acquire() as conn:  # type: ignore[attr-defined]
             await conn.execute("SELECT 1")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"postgres: {exc}") from exc
     # Qdrant
     qdrant = AsyncQdrantClient(url=cfg.qdrant.url)
     try:
         await qdrant.get_collections()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"qdrant: {exc}") from exc
     finally:
         await qdrant.close()
@@ -91,7 +92,7 @@ async def readyz() -> dict:
     )
     try:
         await embeddings.embed("readyz")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"ollama: {exc}") from exc
     finally:
         await embeddings.close()
@@ -116,6 +117,16 @@ class GitRunRequest(BaseModel):
 async def run_git(req: GitRunRequest, bg: BackgroundTasks) -> IngestionRun:
     cfg: openCGConfig = app.state.cfg
     runs: RunStore = app.state.runs
+    try:
+        validate_repo_url(
+            req.repo_url,
+            allowed_hosts=cfg.ingestion.git.allowed_hosts,
+            local_roots=cfg.ingestion.git.local_roots,
+        )
+    except RepoUrlError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "repo_url_rejected", "message": str(exc)}
+        ) from exc
     run = await runs.add(connector="git", repo=req.repo_url)
 
     async def task() -> None:
@@ -129,7 +140,7 @@ async def run_git(req: GitRunRequest, bg: BackgroundTasks) -> IngestionRun:
                 chunks=chunks,
                 finished=True,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("git ingest failed for %s", req.repo_url)
             await runs.update(
                 run.run_id,

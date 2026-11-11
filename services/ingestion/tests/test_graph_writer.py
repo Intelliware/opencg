@@ -8,7 +8,6 @@ upsert paths) without standing up Postgres.
 from __future__ import annotations
 
 import pytest
-
 from opencg_ingestion.graph_writer import (
     _CONFIDENCE_MAP,
     _RELATION_MAP,
@@ -16,15 +15,14 @@ from opencg_ingestion.graph_writer import (
 )
 from opencg_pipeline.storage.catalog import CatalogStore
 
-
 # --- fakes -----------------------------------------------------------------
 
 
 class _Tx:
-    def __init__(self, conn: "_Conn") -> None:
+    def __init__(self, conn: _Conn) -> None:
         self._conn = conn
 
-    async def __aenter__(self) -> "_Conn":
+    async def __aenter__(self) -> _Conn:
         self._conn.tx_started = True
         return self._conn
 
@@ -42,7 +40,7 @@ class _Conn:
     async def execute(self, sql: str, *args: object) -> None:
         self.statements.append((sql, args))
 
-    def transaction(self) -> "_Tx":
+    def transaction(self) -> _Tx:
         return _Tx(self)
 
 
@@ -171,9 +169,7 @@ async def test_ambiguous_edge_lands_candidate():
         graphify_result=result,
     )
     assert edges == 1
-    edge_inserts = [
-        a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s
-    ]
+    edge_inserts = [a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s]
     state = edge_inserts[0][5]
     confidence = edge_inserts[0][6]
     assert state == "candidate"
@@ -189,9 +185,7 @@ async def test_inferred_edge_confirmed_at_lower_confidence():
             {"id": "a", "label": "A()", "file_type": "code", "_origin": "ast"},
             {"id": "b", "label": "B()", "file_type": "code", "_origin": "ast"},
         ],
-        "edges": [
-            {"source": "a", "target": "b", "relation": "uses", "confidence": "INFERRED"}
-        ],
+        "edges": [{"source": "a", "target": "b", "relation": "uses", "confidence": "INFERRED"}],
     }
     concepts, edges = await write_code_graph(
         catalog=catalog,
@@ -200,9 +194,7 @@ async def test_inferred_edge_confirmed_at_lower_confidence():
         graphify_result=result,
     )
     assert edges == 1
-    edge_args = next(
-        a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s
-    )
+    edge_args = next(a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s)
     assert edge_args[5] == "confirmed"
     assert edge_args[6] == 0.85
 
@@ -232,13 +224,11 @@ async def test_relations_map_to_vocabulary():
         file_entity_id="file-uuid",
         graphify_result=result,
     )
-    edge_args = [
-        a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s
-    ]
+    edge_args = [a for s, a in conn.statements if "INSERT INTO opencg.relationship_edge" in s]
     types = [args[2] for args in edge_args]
     # Each mapping verified per the _RELATION_MAP table.
-    expected_types = {"defined_in", "defined_in", "imports", "imports", "calls", "uses"}
-    assert set(types) == expected_types
+    expected_types = ["defined_in", "defined_in", "imports", "imports", "calls", "uses"]
+    assert sorted(types) == sorted(expected_types)
 
 
 @pytest.mark.asyncio
@@ -291,7 +281,12 @@ async def test_external_target_becomes_concept_on_the_fly():
 def test_relation_map_covers_documented_set():
     """Sanity: the mapping table covers everything we documented in design.md."""
     assert set(_RELATION_MAP.keys()) == {
-        "calls", "imports", "imports_from", "contains", "method", "uses"
+        "calls",
+        "imports",
+        "imports_from",
+        "contains",
+        "method",
+        "uses",
     }
 
 

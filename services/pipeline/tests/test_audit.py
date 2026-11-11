@@ -4,15 +4,14 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-
 from opencg_pipeline.storage.audit import AuditStore
 
 
 class _Acquire:
-    def __init__(self, conn: "_Conn") -> None:
+    def __init__(self, conn: _Conn) -> None:
         self.conn = conn
 
-    async def __aenter__(self) -> "_Conn":
+    async def __aenter__(self) -> _Conn:
         return self.conn
 
     async def __aexit__(self, *exc: object) -> None:

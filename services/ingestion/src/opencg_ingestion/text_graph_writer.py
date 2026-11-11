@@ -18,10 +18,9 @@ import unicodedata
 import uuid
 from typing import Any
 
-from opencg_shared import ExtractionResult
-
 from opencg_pipeline.graph.age import reflect_concept, reflect_edge
 from opencg_pipeline.storage.catalog import CatalogStore
+from opencg_shared import ExtractionResult
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ async def write_text_graph(
     if not result.concepts and not result.relations:
         return 0, 0
 
-    pool = catalog._require_pool()  # noqa: SLF001
+    pool = catalog._require_pool()
     concepts_written = 0
     edges_written = 0
     # Track which concept names we've inserted in this batch so subsequent
@@ -241,7 +240,7 @@ async def load_vocabulary(catalog: CatalogStore, tenant: str) -> list[str]:
     Tenant is unused at the schema level (vocab is global), but accepted
     for symmetry with other helpers in case we tenant-scope it later.
     """
-    pool = catalog._require_pool()  # noqa: SLF001
+    pool = catalog._require_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             "SELECT name FROM opencg.relationship_vocab WHERE deprecated_at IS NULL ORDER BY name"

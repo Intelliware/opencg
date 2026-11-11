@@ -135,3 +135,24 @@
 
 - [ ] 17.1 README: short section pointing at this change as the v0 contract and `add-foundation` as the broader vision
 - [ ] 17.2 `docs/OPERATIONS.md` stub: how to swap the embedding model + matching Qdrant vector size
+
+## Superseded (archived 2026-11-10 by `prepare-open-source-release` task 7.5)
+
+Archived as superseded, without syncing its spec deltas: the live baseline in `openspec/specs/` was built by the follow-up changes, which modified most of these requirements. The open tasks above are either done but were never ticked, or are covered by a later change:
+
+| Task | Disposition |
+|---|---|
+| 6.4, 6.5 `/api/embed` support and test | Done: `providers.py` tries `/api/embed` first and falls back to `/api/embeddings`; covered by `tests/test_providers.py` |
+| 7.2 Vocabulary, candidate-edge state machine, traversal | Shipped by `add-knowledge-graph` |
+| 9.4 Sparse vectors on Qdrant | Deferred to `add-foundation` |
+| 10.6 Confluence, custom-API and web connectors | Deferred to `add-foundation` (follow-ups `add-confluence-connector`, `add-custom-api-connector`, `add-web-indexer`) |
+| 11.1 Background enrichment workers | Deferred to `add-foundation` |
+| 12.4 OPA client and bundle; 12.5 replay endpoint | Deferred to `add-foundation` |
+| 13.4 Collector and Tempo/Loki/Prometheus/Grafana | Collector shipped (compose `otel-collector`); the rest deferred to `add-foundation` |
+| 13.5 Dashboards and cost metric | Deferred to `add-foundation` |
+| 14.8 Graph editor, vector neighbourhoods, content management, ingestion control | Shipped by `add-admin-vector-and-content` and `add-knowledge-graph` |
+| 15.3 to 15.7 Ollama compose service, healthcheck, `depends_on`, model pre-pull, `.env.example` defaults | Done: `ollama/ollama:0.30.7`, `infra/ollama/{entrypoint,healthcheck}.sh`, `.env.example` |
+| 15.8 Local `.env` | Per-developer file, not tracked |
+| 15.9 Note in `add-foundation` | Done: `add-foundation/tasks.md` opens with it |
+| 16.1 to 16.4 Smoke and readiness checks | Done, and since replaced by `stabilize-full-smoke`; re-verified on a fresh clone in `prepare-open-source-release` phase 1 |
+| 17.1 README section; 17.2 `docs/OPERATIONS.md` model-swap stub | Done: the README lists this change as the v0 base, and `docs/OPERATIONS.md` documents swapping the embedding model |

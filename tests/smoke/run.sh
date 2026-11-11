@@ -3,25 +3,22 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-PIPELINE_URL="${PIPELINE_URL:-http://localhost:8000}"
+# shellcheck source=tests/smoke/lib.sh
+source "$ROOT/tests/smoke/lib.sh"
+
+PIPELINE_URL="${PIPELINE_URL:-http://localhost:$(cfg OPENCG__PIPELINE__HOST_PORT 8000)}"
+QDRANT_URL="${QDRANT_URL:-http://localhost:$(cfg OPENCG__QDRANT__HOST_PORT 6333)}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
 SMOKE_INGEST_TIMEOUT_SECONDS="${SMOKE_INGEST_TIMEOUT_SECONDS:-120}"
 SMOKE_CHAT_MODE="${SMOKE_CHAT_MODE:-stub}"
 RUN_ID="$(date -u +%Y%m%d%H%M%S)-$$"
-REPO_NAME="opencg-smoke-$RUN_ID"
-FIXTURE_DIR="/tmp/$REPO_NAME"
-SOURCE_PREFIX="git://$REPO_NAME/"
+FIXTURE_DIR="$(fixture_dir "$RUN_ID")"
+SOURCE_PREFIX="$(fixture_prefix "$RUN_ID")"
 START_SECONDS=$SECONDS
 SMOKE_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ACTIVE_PID=""
 OVERALL_TIMER=""
 STAGE_LOG=""
-
-COMPOSE=(
-  docker compose
-  -f "$ROOT/infra/compose/docker-compose.yml"
-  --env-file "$ROOT/.env"
-)
 
 say() { printf '\n\e[1;36m▌ %s\e[0m\n' "$*"; }
 pass() { printf '✓ %s\n' "$*"; }
@@ -43,6 +40,10 @@ if [ "${SMOKE_DRY_RUN:-0}" = "1" ]; then
   esac
   exit 0
 fi
+case "$SMOKE_CHAT_MODE" in
+  stub | cloud) ;;
+  *) fail "SMOKE_CHAT_MODE must be 'stub' or 'cloud'" ;;
+esac
 
 kill_ingestion_children() {
   "${COMPOSE[@]}" exec -T ingestion sh -c '
@@ -61,7 +62,7 @@ cleanup() {
     kill "$ACTIVE_PID" >/dev/null 2>&1 || true
   fi
   kill_ingestion_children
-  "${COMPOSE[@]}" exec -T ingestion rm -rf "$FIXTURE_DIR" >/dev/null 2>&1 || true
+  fixture_remove "$RUN_ID"
   if [ -n "$OVERALL_TIMER" ]; then
     kill "$OVERALL_TIMER" >/dev/null 2>&1 || true
   fi
@@ -115,9 +116,14 @@ run_timed() {
 }
 
 psql_value() {
+  # Credentials come from the container's own POSTGRES_* environment.
   "${COMPOSE[@]}" exec -T postgres \
-    psql -U opencg -d opencg -tA -F '|' -c "$1" | tr -d '\r'
+    sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F "|" -c "$1"' sh "$1" \
+    | tr -d '\r'
 }
+
+say "Apply the smoke overlay (chat stub + fixture mount)"
+"${COMPOSE[@]}" up -d --wait smoke-chat ingestion
 
 say "Wait for pipeline and smoke dependencies"
 for _ in $(seq 1 60); do
@@ -143,7 +149,7 @@ pass "pipeline and smoke dependencies are ready"
 say "Verify Qdrant client/server compatibility"
 CLIENT_VERSION="$("${COMPOSE[@]}" exec -T ingestion uv run python -c \
   "import importlib.metadata; print(importlib.metadata.version('qdrant-client'))")"
-SERVER_VERSION="$(curl -fsS http://localhost:6333/ | python3 -c \
+SERVER_VERSION="$(curl -fsS "$QDRANT_URL/" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["version"])')"
 python3 - "$CLIENT_VERSION" "$SERVER_VERSION" <<'PY'
 import sys
@@ -158,56 +164,19 @@ PY
 pass "Qdrant client $CLIENT_VERSION matches server $SERVER_VERSION"
 
 say "Construct isolated local Git fixture"
-"${COMPOSE[@]}" exec -T ingestion sh -c '
-  set -eu
-  destination=$1
-  run_id=$2
-  rm -rf "$destination"
-  cp -R /opt/opencg/smoke-fixture "$destination"
-  sed -i "s/SMOKE_RUN_ID/$run_id/g" "$destination/README.md"
-  if [ "$3" = "cloud" ]; then
-    rm -f "$destination/context_tools.py"
-  fi
-  git -C "$destination" init -q
-  git -C "$destination" config user.name "openCG Smoke"
-  git -C "$destination" config user.email "smoke@localhost"
-  git -C "$destination" add .
-  git -C "$destination" commit -qm "smoke fixture"
-' sh "$FIXTURE_DIR" "$RUN_ID" "$SMOKE_CHAT_MODE"
+fixture_create "$RUN_ID" "$SMOKE_CHAT_MODE"
 pass "fixture ready at $FIXTURE_DIR with source prefix $SOURCE_PREFIX"
 
-INGEST_ARGS=(
-  exec -T
-)
-if [ "$SMOKE_CHAT_MODE" = "stub" ]; then
-  INGEST_ARGS+=(
-    -e OPENCG__PROVIDERS__CHAT__BASE_URL=http://smoke-chat:11434
-    -e OPENCG__PROVIDERS__CHAT__MODEL=smoke-chat
-    -e OPENCG__PROVIDERS__CHAT__API_KEY=
-  )
-  MAX_DOCUMENTS=10
-  MAX_CHUNKS=20
-elif [ "$SMOKE_CHAT_MODE" = "cloud" ]; then
+if [ "$SMOKE_CHAT_MODE" = "cloud" ]; then
   "${COMPOSE[@]}" exec -T ingestion sh -c '
     test -n "${OPENCG__PROVIDERS__CHAT__BASE_URL:-}" &&
     test -n "${OPENCG__PROVIDERS__CHAT__MODEL:-}" &&
     test -n "${OPENCG__PROVIDERS__CHAT__API_KEY:-}"
   ' || fail "cloud mode requires chat base URL, model, and OPENCG__PROVIDERS__CHAT__API_KEY"
-  MAX_DOCUMENTS=1
-  MAX_CHUNKS=2
-else
-  fail "SMOKE_CHAT_MODE must be 'stub' or 'cloud'"
 fi
-INGEST_ARGS+=(
-  ingestion
-  uv run --package opencg-ingestion
-  python -m opencg_ingestion.cli git "$FIXTURE_DIR"
-  --max-documents "$MAX_DOCUMENTS"
-  --max-chunks "$MAX_CHUNKS"
-)
 
 run_timed "Ingest deterministic fixture ($SMOKE_CHAT_MODE chat)" \
-  "$SMOKE_INGEST_TIMEOUT_SECONDS" "${COMPOSE[@]}" "${INGEST_ARGS[@]}"
+  "$SMOKE_INGEST_TIMEOUT_SECONDS" fixture_ingest "$RUN_ID" "$SMOKE_CHAT_MODE"
 INGEST_OUTPUT="$(cat "$STAGE_LOG")"
 PARENTS="$(printf '%s' "$INGEST_OUTPUT" | sed -n 's/.*Ingested \([0-9][0-9]*\) files.*/\1/p' | tail -1)"
 CHUNKS="$(printf '%s' "$INGEST_OUTPUT" | sed -n 's/.*files \/ \([0-9][0-9]*\) chunks.*/\1/p' | tail -1)"
@@ -308,6 +277,25 @@ TS="$(curl -fsS -X DELETE "$PIPELINE_URL/entities/$ENTITY_ID")"
 printf '%s' "$TS" | python3 -c \
   'import json,sys; assert json.load(sys.stdin).get("tombstoned_at")'
 pass "tombstoned current-run entity $ENTITY_ID"
+
+say "Verify the tombstoned chunk is no longer retrieved"
+AFTER="$(curl -fsS -X POST "$PIPELINE_URL/retrieve" \
+  -H 'content-type: application/json' \
+  -d "{
+    \"correlation_id\": \"smoke-$RUN_ID-after-tombstone\",
+    \"identity\": {\"principal\":\"local-dev\",\"roles\":[\"admin\",\"reader\"],\"tenant\":\"default\"},
+    \"tool\": \"retrieve_for_context\",
+    \"query\": \"amber-context protocol\",
+    \"top_k\": 10,
+    \"token_budget\": 2000
+  }")"
+printf '%s' "$AFTER" | python3 -c '
+import json, sys
+entity_id = sys.argv[1]
+returned = [item["entity_id"] for item in json.load(sys.stdin)["fragments"]]
+assert entity_id not in returned, f"tombstoned {entity_id} still retrieved: {returned}"
+' "$ENTITY_ID"
+pass "tombstoned entity excluded from /retrieve"
 
 say "Verify ingestion connector proxy"
 curl -fsS "$PIPELINE_URL/ingestion/connectors" | python3 -c '

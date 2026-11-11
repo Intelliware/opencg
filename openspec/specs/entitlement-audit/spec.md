@@ -1,7 +1,9 @@
 # entitlement-audit Specification
 
 ## Purpose
-TBD - created by archiving change add-knowledge-graph. Update Purpose after archive.
+
+Record every knowledge-graph state change (concept and relationship promotions, demotions, edits, merges and tombstones) in an append-only audit log, so each review decision stays attributable and inspectable.
+
 ## Requirements
 ### Requirement: Graph audit log
 

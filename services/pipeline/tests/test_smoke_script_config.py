@@ -4,7 +4,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[3]
 SCRIPT = ROOT / "tests/smoke/run.sh"
 

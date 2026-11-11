@@ -13,19 +13,21 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "format": "echo 'no formatter'"
+    "format": "echo 'no formatter'",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@opencg/shared": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "express": "^5.2.1",
-    "undici": "^7.0.0"
+    "undici": "^7.0.0",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.12"
   }
 }

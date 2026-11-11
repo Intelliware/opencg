@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from datetime import datetime, timezone
-from typing import Iterator
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from opencg_shared import IngestionRun, IngestionRunStatus
@@ -19,7 +19,7 @@ from opencg_shared import IngestionRun, IngestionRunStatus
 class RunStore:
     def __init__(self, *, cap: int = 100) -> None:
         self._cap = cap
-        self._runs: "deque[IngestionRun]" = deque(maxlen=cap)
+        self._runs: deque[IngestionRun] = deque(maxlen=cap)
         self._lock = asyncio.Lock()
 
     async def add(self, *, connector: str, repo: str | None) -> IngestionRun:
@@ -27,7 +27,7 @@ class RunStore:
             run_id=str(uuid4()),
             connector=connector,
             repo=repo,
-            started_at=datetime.now(tz=timezone.utc),
+            started_at=datetime.now(tz=UTC),
             status="queued",
         )
         async with self._lock:
@@ -60,7 +60,7 @@ class RunStore:
                 if error is not None:
                     updates["error"] = error
                 if finished:
-                    updates["finished_at"] = datetime.now(tz=timezone.utc)
+                    updates["finished_at"] = datetime.now(tz=UTC)
                 new = r.model_copy(update=updates)
                 self._runs[i] = new
                 return new

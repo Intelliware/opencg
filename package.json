@@ -1,6 +1,6 @@
 {
   "name": "opencg-context-fabric",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Open-source, self-hostable enterprise context engineering, exposed as MCP.",
   "license": "MIT",
@@ -12,10 +12,32 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "format": "pnpm -r format"
+    "format": "pnpm -r format",
+    "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser@2": "^2.4.0",
+      "brace-expansion@2": "^2.1.7",
+      "browserslist@4": "^4.28.7",
+      "fast-uri@3": "^3.1.9",
+      "form-data@4": "^4.0.6",
+      "hono@4": "^4.13.11",
+      "@hono/node-server@1": "^1.19.15",
+      "ip-address@10": "^10.7.4",
+      "nanoid@3": "^3.3.18",
+      "postcss@8": "^8.5.32",
+      "postcss-selector-parser@6": "^6.1.5",
+      "proxy-addr@2": "^2.0.8",
+      "qs@6": "^6.16.1",
+      "sharp": "^0.35.5",
+      "source-map-js@1": "^1.2.2",
+      "undici@7": "^7.30.1",
+      "baseline-browser-mapping@2": "^2.11.0"
+    }
   }
 }

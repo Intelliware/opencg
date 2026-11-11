@@ -8,10 +8,10 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from opencg_shared import openCGConfig
 from opencg_pipeline.graph.extract import extract_for_chunk
 from opencg_pipeline.providers import OllamaChat
 from opencg_pipeline.storage.catalog import CatalogStore
+from opencg_shared import openCGConfig
 
 from opencg_ingestion.text_graph_writer import load_vocabulary, write_text_graph
 
@@ -88,7 +88,7 @@ async def reextract_chunks(
                     extractor_version=version,
                 )
                 summary.succeeded += 1
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 summary.failed += 1
                 log.warning("re-extract failed for chunk %s: %s", row["entity_id"], exc)
         return summary
@@ -125,7 +125,7 @@ async def _list_chunks(
     if since:
         params.append(since)
         clauses.append(f"entity.updated_at >= ${len(params)}")
-    async with catalog._require_pool().acquire() as conn:  # noqa: SLF001
+    async with catalog._require_pool().acquire() as conn:
         rows = await conn.fetch(
             f"""
             SELECT entity.entity_id::text, entity.body,

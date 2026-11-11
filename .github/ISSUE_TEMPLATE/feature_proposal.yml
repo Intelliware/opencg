@@ -1,0 +1,37 @@
+name: Feature or change proposal
+description: Suggest a new capability or a change to existing behaviour.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        openCG changes go through the [OpenSpec workflow](https://github.com/Intelliware/opencg/blob/main/CONTRIBUTING.md#the-openspec-workflow-required): agree on the problem and the approach here first, then the change becomes an `openspec/changes/<name>/` proposal (proposal, design, spec deltas, tasks) that is reviewed before any code is written.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today, or what goes wrong? Who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should openCG do instead? Describe the behaviour, not only an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: input
+    id: capabilities
+    attributes:
+      label: Affected capabilities
+      description: Which `openspec/specs/` capabilities this would change, if you know (for example `retrieval-pipeline`, `admin-ui`).
+  - type: checkboxes
+    id: openspec
+    attributes:
+      label: OpenSpec
+      options:
+        - label: I'm willing to write the OpenSpec proposal for this change.

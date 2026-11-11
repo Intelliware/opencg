@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 import respx
 from httpx import Response
-
 from opencg_pipeline.providers import OllamaEmbeddings
 
 
@@ -112,7 +112,7 @@ async def test_embed_propagates_non_404_errors():
     )
     client = OllamaEmbeddings(base_url="https://ollama.com", model="m", api_key="bad")
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.HTTPStatusError):
             await client.embed("hi")
     finally:
         await client.close()

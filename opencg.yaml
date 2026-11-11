@@ -25,7 +25,7 @@ ollama:
   # Default targets the compose `ollama` service. `http://host.docker.internal:11434`
   # works when bridging to a host install; `https://ollama.com` works for the
   # Cloud's chat endpoints but NOT embeddings on the reference account
-  # (see openspec/changes/bootstrap-thin-mvp/design.md D1).
+  # (see openspec/changes/archive/2026-11-10-bootstrap-thin-mvp/design.md D1).
   base_url: http://ollama:11434
   # Swapping the embedding model? Match `qdrant.vector_size` to the model's
   # output dim or recreate the Qdrant collection — see docs/OPERATIONS.md.

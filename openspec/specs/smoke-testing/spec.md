@@ -1,7 +1,9 @@
 # smoke-testing Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-full-smoke. Update Purpose after archive.
+
+Provide a deterministic, bounded end-to-end smoke test of the running stack. It ingests a uniquely named local fixture with a chat stub, asserts only on that run's data, verifies telemetry, and offers an opt-in, capped real-provider canary.
+
 ## Requirements
 ### Requirement: Deterministic full-stack fixture
 

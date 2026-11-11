@@ -70,6 +70,7 @@ export default async function GraphPage({ searchParams }: { searchParams: Promis
         <div>
           <h2 className="mb-2 text-lg font-semibold">Concepts</h2>
           <form className="mb-3 flex gap-2">
+            <input type="hidden" name="tab" value="concepts" />
             <Input name="search" placeholder="Search concepts" defaultValue={params.search || ""} className="max-w-xs" />
             <Button variant="secondary">Search</Button>
           </form>
