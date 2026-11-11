@@ -41,11 +41,10 @@ This applies to:
 ## In-flight changes
 
 ```
-prepare-open-source-release   — fresh-clone fixes, safe defaults, Playwright e2e, CI, community files (IN PROGRESS)
 add-foundation                — full v0 vision (canonical aspiration; delivered per capability by follow-up changes)
 ```
 
-Everything else has shipped and is archived under `openspec/changes/archive/` (including `bootstrap-thin-mvp`, archived as superseded); the merged baseline is in `openspec/specs/`.
+Everything else has shipped and is archived under `openspec/changes/archive/` (including `prepare-open-source-release`, the v0.1.0 release work, and `bootstrap-thin-mvp`, archived as superseded); the merged baseline is in `openspec/specs/`. `main` is protected: changes land through pull requests with one approving review and green `static`, `stack` and `dependency-review` checks.
 
 Check the live state any time with `openspec list`.
 

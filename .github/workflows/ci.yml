@@ -92,10 +92,22 @@ jobs:
           key: playwright-chromium-${{ steps.playwright.outputs.version }}
       - name: Install Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @opencg/admin-ui exec playwright install --with-deps chromium
-      - name: Install Chromium system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @opencg/admin-ui exec playwright install-deps chromium
+        run: pnpm --filter @opencg/admin-ui exec playwright install chromium
+      # The runner image usually has every library Chromium needs; apt (and the
+      # Ubuntu mirrors, which have failed to resolve on runners) is a fallback.
+      - name: Install Chromium system dependencies if it can't start
+        working-directory: services/admin-ui
+        run: |
+          if node -e "require('@playwright/test').chromium.launch().then((b) => b.close())"; then
+            echo "Chromium starts with the runner's libraries; skipping install-deps"
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            pnpm exec playwright install-deps chromium && exit 0
+            echo "install-deps failed (attempt $attempt of 3); retrying in 30 s"
+            sleep 30
+          done
+          exit 1
 
       - name: Create .env from the example
         run: cp .env.example .env
