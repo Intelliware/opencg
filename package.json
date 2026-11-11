@@ -1,6 +1,6 @@
 {
   "name": "opencg-context-fabric",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Open-source, self-hostable enterprise context engineering, exposed as MCP.",
   "license": "MIT",

@@ -25,7 +25,7 @@ openCG builds out the missing components: identity, intent, hybrid retrieval, ca
 
 ## Status
 
-**Version 0.1.0 (unreleased).** The first public release is being prepared in [`prepare-open-source-release`](./openspec/changes/prepare-open-source-release/). Release notes accumulate in [`CHANGELOG.md`](./CHANGELOG.md).
+**Version 0.1.0, released 2026-11-10**: the first public release, prepared by [`prepare-open-source-release`](./openspec/changes/prepare-open-source-release/). Release notes are in [`CHANGELOG.md`](./CHANGELOG.md) and on the [releases page](https://github.com/Intelliware/opencg/releases).
 
 The thin MVP, the first end-to-end working slice, runs in Docker Compose, with an admin UI for vector search, entity inspection, ingestion control and knowledge-graph review. The full v0 vision is broader and is delivered as a series of OpenSpec changes, each going proposal, then design and specs, then tasks, implementation and archive.
 

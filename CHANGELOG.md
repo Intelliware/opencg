@@ -4,7 +4,9 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
-The first public release, planned as `0.1.0`.
+## [0.1.0] - 2026-11-10
+
+The first public release.
 
 ### Added
 
@@ -15,7 +17,7 @@ The first public release, planned as `0.1.0`.
 - **Graph explorer** (`add-graph-explorer-view`, `default-graph-to-map`, `update-graph-map-detail`). An interactive force-directed map, now the default view of `/graph`, with concept search and a navigable detail panel.
 - **Remote MCP** (`add-mcp-http-transport`, `add-mcp-oauth-stopgap`). A Streamable HTTP transport with an optional bearer token, and a minimal OAuth stopgap for claude.ai connectors.
 - **Deterministic smoke test** (`stabilize-full-smoke`): a bounded end-to-end check that uses a local fixture, a chat stub and OpenTelemetry verification.
-- **Release readiness** (`prepare-open-source-release`, in progress):
+- **Release readiness** (`prepare-open-source-release`):
   - A Playwright end-to-end suite for every admin UI route (`make e2e`).
   - CI with `static`, `dependency-review` and full-stack `stack` jobs, plus Dependabot.
   - `make ci`, an optional admin UI access gate, and validation of submitted ingestion URLs.
@@ -47,3 +49,6 @@ The first public release, planned as `0.1.0`.
 - Dependencies upgraded to clear every critical and high advisory; the remaining moderate and low ones are listed in [`SECURITY.md`](./SECURITY.md).
 - "Run now" ingestion refuses option injection, `ext::` and `file://` transports, embedded credentials, and hosts that resolve to private addresses.
 - A root `.dockerignore` keeps `.env` and local build state out of image build contexts.
+
+[Unreleased]: https://github.com/Intelliware/opencg/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Intelliware/opencg/releases/tag/v0.1.0

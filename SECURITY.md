@@ -4,7 +4,7 @@
 
 **Please do not open a public issue, pull request or discussion for a security problem.**
 
-Report it privately through GitHub: on the repository's **Security** tab, choose **Report a vulnerability** ([direct link](https://github.com/Intelliware/opencg/security/advisories/new)). The report is visible only to the maintainers, and we can work on a fix with you in a private advisory before anything is published.
+Report it privately through GitHub: on the repository's **Security** tab, choose **Report a vulnerability** ([direct link](https://github.com/Intelliware/opencg/security/advisories/new)). The report is visible only to the maintainers, and we can work on a fix with you in a private advisory before anything is published. If you can't use GitHub, email [opensource@electricmind.com](mailto:opensource@electricmind.com) instead.
 
 Please include:
 

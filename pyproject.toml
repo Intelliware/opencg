@@ -1,6 +1,6 @@
 [project]
 name = "opencg-context-fabric"
-version = "0.0.0"
+version = "0.1.0"
 description = "Open-source, self-hostable enterprise context engineering, exposed as MCP."
 readme = "README.md"
 requires-python = ">=3.12"
