@@ -39,7 +39,7 @@ test.describe("every route renders against live services", () => {
         const res = await page.goto(route.path);
         expect(res?.status(), route.path).toBe(200);
         await page.waitForLoadState("networkidle");
-        // A known intermittent production hydration error (tasks.md 4.16) hits about
+        // A known intermittent production hydration error (issue #2) hits about
         // 1 load in 100 on any route. Reload once; a deterministic mismatch recurs.
         if (problems.console.length && problems.console.every((msg) => msg.includes("React error #418"))) {
           test.info().annotations.push({ type: "flaky-hydration", description: route.path });

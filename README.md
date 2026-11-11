@@ -25,7 +25,7 @@ openCG builds out the missing components: identity, intent, hybrid retrieval, ca
 
 ## Status
 
-**Version 0.1.0, released 2026-11-10**: the first public release, prepared by [`prepare-open-source-release`](./openspec/changes/prepare-open-source-release/). Release notes are in [`CHANGELOG.md`](./CHANGELOG.md) and on the [releases page](https://github.com/Intelliware/opencg/releases).
+**Version 0.1.0, released 2026-11-10**: the first public release, prepared by [`prepare-open-source-release`](./openspec/changes/archive/2026-11-10-prepare-open-source-release/). Release notes are in [`CHANGELOG.md`](./CHANGELOG.md) and on the [releases page](https://github.com/Intelliware/opencg/releases).
 
 The thin MVP, the first end-to-end working slice, runs in Docker Compose, with an admin UI for vector search, entity inspection, ingestion control and knowledge-graph review. The full v0 vision is broader and is delivered as a series of OpenSpec changes, each going proposal, then design and specs, then tasks, implementation and archive.
 
@@ -42,11 +42,11 @@ The thin MVP, the first end-to-end working slice, runs in Docker Compose, with a
 | 2026-06-17 | `add-mcp-http-transport` · `reorder-admin-nav` · `stabilize-full-smoke` · `update-graph-map-detail` | Remote MCP over HTTP; nav order; the deterministic, bounded smoke test; map search and detail panel |
 | 2026-06-18 | `add-mcp-oauth-stopgap` · `rename-to-open-context-graph` | OAuth stopgap for claude.ai connectors; the final name, Open Context Graph |
 | 2026-11-10 | `exclude-tombstoned-from-retrieval` | Tombstoned entities no longer returned by retrieval or vector search |
+| 2026-11-10 | `prepare-open-source-release` | The v0.1.0 release work: fresh-clone fixes, loopback-only defaults, an optional admin login, ingestion URL validation, the Playwright e2e suite, CI, branch protection, and community files |
 | 2026-11-10 | `bootstrap-thin-mvp` | The v0 stack contract: MCP server, retrieval pipeline, git ingestion, audit log, compose. Archived as superseded; its open items are recorded against later changes |
 
 **In flight** ([`openspec list`](./openspec/changes/)):
 
-- **[`prepare-open-source-release`](./openspec/changes/prepare-open-source-release/)** makes a fresh clone work cleanly and safely: build and lint fixes, loopback-only defaults, an optional admin login, a Playwright e2e suite, CI, and community files.
 - **[`add-foundation`](./openspec/changes/add-foundation/)** is the **full v0 vision**, spanning 12 capabilities: intent classifier, rerank and compression, OPA enforcement, more connectors, enrichment workers, the Tempo/Grafana stack, and more. Each deferred capability ships as its own follow-up change that modifies the requirements earlier changes set.
 
 ## Stack
@@ -359,7 +359,7 @@ CI runs `static` and `dependency-review` on every pull request, and the full-sta
 
 ## Known issues
 
-- **Intermittent hydration error.** About 1 in 100 production page loads logs React error #418, most often on `/entities`. The page recovers on its own. The e2e suite retries once and annotates the report (`prepare-open-source-release` task 4.16).
+- **Intermittent hydration error.** About 1 in 100 production page loads logs React error #418, most often on `/entities`. The page recovers on its own. The e2e suite retries once and annotates the report ([#2](https://github.com/Intelliware/opencg/issues/2)).
 - **Ingestion metrics aren't exposed.** The ingestion service counts tokens for its embedding and extraction calls, but serves no `/metrics` endpoint, so those counters can't be scraped. Its OTel spans carry the same token attributes.
 - **Audit partitioning is planned, not active.** Every audit row lands in the default partition until weekly partitions are pre-created.
 - **No schema migrations.** Changing an init script needs a fresh volume (`make down-v`).
@@ -383,7 +383,7 @@ openspec validate add-foundation --strict      # re-validate
 | Document | What's there |
 |---|---|
 | [`openspec/project.md`](./openspec/project.md) | Vision, stack, conventions |
-| [`openspec/specs/`](./openspec/specs/) | The archived spec baseline: 11 capability specs |
+| [`openspec/specs/`](./openspec/specs/) | The archived spec baseline: 12 capability specs |
 | [`openspec/changes/add-foundation/`](./openspec/changes/add-foundation/) | The full v0 vision (12 capabilities) |
 | [`openspec/changes/archive/2026-06-12-add-knowledge-graph/`](./openspec/changes/archive/2026-06-12-add-knowledge-graph/) | The shipped knowledge-graph contract |
 | [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) | Operating the stack: ports and network exposure, the admin gate, ingestion, test overlays, swapping embedding models, troubleshooting |

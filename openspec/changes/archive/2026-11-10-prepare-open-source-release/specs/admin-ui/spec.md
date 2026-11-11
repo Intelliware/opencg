@@ -50,7 +50,7 @@ The admin UI SHALL have a Playwright end-to-end suite under `services/admin-ui/e
 
 ### Requirement: Clean-checkout build
 
-The admin UI's production image, `next build`, `tsc --noEmit`, `next lint` and `build-storybook` SHALL all succeed from a clean checkout with no untracked files, and none of them MAY prompt for interactive input.
+The admin UI's production image, `next build`, `tsc --noEmit`, the ESLint CLI (`pnpm lint`) and `build-storybook` SHALL all succeed from a clean checkout with no untracked files, and none of them MAY prompt for interactive input.
 
 #### Scenario: Storybook builds from a clean clone
 
