@@ -80,11 +80,11 @@
 
 - [x] 6.1 `CONTRIBUTING.md`: prerequisites, the fresh-clone commands, the OpenSpec workflow, testing tiers (unit / Storybook / smoke / e2e), commit and PR expectations
 - [x] 6.2 `SECURITY.md`: private disclosure route and the known stopgaps (stub identity, MCP OAuth stopgap, admin gate). It also lists the unauthenticated pipeline and ingestion APIs, the URL guard's DNS-rebinding gap, plain HTTP, the default Postgres password, and the remaining moderate and low advisories (from 3.11)
-- [ ] 6.3 `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) with a contact address (the official 2.1 text is committed; the enforcement contact is still `[INSERT CONTACT METHOD]` and needs an address from Edward)
+- [x] 6.3 `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) with a contact address (opensource@electricmind.com, from Edward on 2026-11-10; also the fallback route in `SECURITY.md`)
 - [x] 6.4 `CHANGELOG.md` (Keep a Changelog) with an `Unreleased` section summarising the archived changes
 - [x] 6.5 Issue templates (bug, feature/proposal pointing to OpenSpec) and a PR template with a checklist (OpenSpec change, tests, smoke, e2e)
 - [x] 6.6 Update `LICENSE` to name Electric Mind; check that the licences of bundled dependencies (graphifyy MIT, Apache AGE, Qdrant, Valkey) are compatible and credited (`THIRD_PARTY_NOTICES.md`: runtime images, the model, key libraries, and a full npm and Python licence scan. No GPL or AGPL was found; the weak-copyleft `sharp-libvips` (LGPL, shipped unmodified in the admin UI image), `axe-core` (MPL, development only) and `certifi` (MPL) are noted)
-- [ ] 6.7 Enable GitHub private vulnerability reporting on the repository, which `SECURITY.md` names as the disclosure route (currently off; GitHub settings, Edward)
+- [x] 6.7 Enable GitHub private vulnerability reporting on the repository, which `SECURITY.md` names as the disclosure route (enabled through the API on 2026-11-10, at Edward's request)
 
 ## 7. Documentation reconciliation
 
@@ -96,8 +96,8 @@
 
 ## 8. Verification and release
 
-- [ ] 8.1 Fresh clone in a temp dir, then `make bootstrap && make ci`; every step green
-- [ ] 8.2 `bash tests/smoke/run.sh` on the live stack
+- [x] 8.1 Fresh clone in a temp dir, then `make bootstrap && make ci`; every step green (at `0f1cabd`, compose project `opencg-release`: everything passed in about 2 min, then all five images were rebuilt from the clone and `make ci-stack` passed again, with smoke and e2e 19 passed)
+- [x] 8.2 `bash tests/smoke/run.sh` on the live stack (part of 8.1, and of every CI `stack` run)
 - [ ] 8.3 CI green on the PR, including the `stack` job
 - [ ] 8.4 Final `gitleaks detect` over the full history, plus the `CLAUDE.md` pre-push grep; confirm zero open critical or high Dependabot alerts on `main` (or a recorded dismissal for each)
 - [ ] 8.5 Tag `v0.1.0`, publish GitHub release notes from the CHANGELOG, and set the repo description and topics
