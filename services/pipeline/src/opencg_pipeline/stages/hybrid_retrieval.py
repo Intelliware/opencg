@@ -66,17 +66,17 @@ async def run(
 
     # Dense leg: embed query, search Qdrant. Lexical leg: Postgres FTS+trgm.
     # Both run in parallel.
-    async def dense_leg() -> tuple[list[VectorHit], int, int, str]:
+    async def dense_leg() -> tuple[list[VectorHit], int, int, str, str, float | None]:
         emb = await embeddings.embed(query)
         hits = await vector.search(sources=None, vector=emb.vector, limit=overfetch_limit(top_k))
         kept, dropped = await drop_tombstoned(hits, catalog=catalog, tenant=tenant, limit=top_k)
-        return kept, dropped, emb.tokens_in, emb.model
+        return kept, dropped, emb.tokens_in, emb.model, emb.provider, emb.cost_usd
 
     async def lexical_leg() -> list[CatalogHit]:
         return await catalog.lexical_search(tenant=tenant, query=query, limit=top_k)
 
     (
-        (dense_hits, tombstoned_filtered, embed_tokens_in, embed_model),
+        (dense_hits, tombstoned_filtered, embed_tokens_in, embed_model, embed_provider, embed_cost),
         lexical_hits,
     ) = await asyncio.gather(dense_leg(), lexical_leg())
 
@@ -125,5 +125,7 @@ async def run(
         "tombstoned_filtered": tombstoned_filtered,
         "embed_tokens_in": embed_tokens_in,
         "embed_model": embed_model,
+        "embed_provider": embed_provider,
+        "embed_cost_usd": embed_cost,
     }
     return candidates, telemetry

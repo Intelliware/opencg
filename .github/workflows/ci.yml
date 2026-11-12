@@ -48,6 +48,7 @@ jobs:
       - run: make test
       - run: make storybook
       - run: make check-agent-guides
+      - run: make check-dashboards
       - run: make openspec-validate
       - run: make secrets-scan
 
@@ -193,5 +194,102 @@ jobs:
             compose-logs.txt
             services/admin-ui/playwright-report/
             services/admin-ui/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # The OPTIONAL observability overlay (Prometheus, Tempo, Grafana), checked by
+  # `make smoke-obs`. A required check: it runs on every PR to main, on pushes
+  # to main and nightly, with NO path filter (a required check that a path
+  # filter skips never reports, and the PR stays blocked). It runs in parallel
+  # with `stack`, which never applies the overlay, so `stack` keeps its time.
+  observability:
+    name: observability
+    needs: static
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OLLAMA_CACHE_DIR: /tmp/ollama-models
+      COMPOSE_OBS: >-
+        docker compose -f infra/compose/docker-compose.yml
+        -f infra/compose/docker-compose.observability.yml --env-file .env --profile dev
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create .env from the example
+        run: cp .env.example .env
+
+      - uses: docker/setup-buildx-action@v4
+      - name: Build images (layer cache per image, shared with the stack job)
+        uses: docker/bake-action@v7
+        with:
+          source: ./infra/compose
+          files: docker-compose.yml
+          allow: fs.read=../..
+          targets: postgres,pipeline,ingestion,mcp-server,admin-ui
+          load: true
+          set: |
+            postgres.cache-from=type=gha,scope=postgres
+            pipeline.cache-from=type=gha,scope=pipeline
+            ingestion.cache-from=type=gha,scope=ingestion
+            mcp-server.cache-from=type=gha,scope=mcp-server
+            admin-ui.cache-from=type=gha,scope=admin-ui
+
+      # Read-only use of the stack job's Ollama model cache (that job saves it).
+      - name: Ollama model cache key
+        id: ollama
+        run: |
+          model="$(sed -n 's/^OPENCG__OLLAMA__EMBEDDING_MODEL=//p' .env.example)"
+          tag="$(sed -n 's|.*image: ollama/ollama:||p' infra/compose/docker-compose.yml)"
+          echo "key=ollama-models-${model}-${tag}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: ollama-cache
+        with:
+          path: ${{ env.OLLAMA_CACHE_DIR }}
+          key: ${{ steps.ollama.outputs.key }}
+      - name: Seed the Ollama volume from the cache
+        if: steps.ollama-cache.outputs.cache-hit == 'true'
+        run: |
+          docker volume create \
+            --label com.docker.compose.project=opencg \
+            --label com.docker.compose.volume=ollama-data \
+            opencg_ollama-data
+          docker run --rm -v opencg_ollama-data:/root/.ollama -v "$OLLAMA_CACHE_DIR:/cache:ro" \
+            alpine:3 sh -c 'mkdir -p /root/.ollama/models && cp -a /cache/. /root/.ollama/models/'
+
+      - name: Pull the observability images (with retries)
+        run: |
+          for attempt in 1 2 3; do
+            $COMPOSE_OBS pull --quiet prometheus tempo grafana otel-collector && exit 0
+            echo "pull failed (attempt $attempt of 3); retrying in 15 s"
+            sleep 15
+          done
+          exit 1
+
+      - name: Start the stack with the observability overlay and wait for health
+        run: $COMPOSE_OBS up -d --wait --wait-timeout 900
+
+      - run: make smoke-obs
+
+      - name: Collect compose logs and Prometheus target state
+        if: failure()
+        run: |
+          docker compose -f infra/compose/docker-compose.yml \
+            -f infra/compose/docker-compose.smoke.yml \
+            -f infra/compose/docker-compose.observability.yml \
+            --env-file .env --profile dev logs --no-color --timestamps > compose-logs.txt 2>&1 || true
+          $COMPOSE_OBS ps -a >> compose-logs.txt 2>&1 || true
+          curl -fsS http://localhost:9090/api/v1/targets > prometheus-targets.json 2>&1 || true
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: observability-failure-evidence
+          path: |
+            compose-logs.txt
+            prometheus-targets.json
           retention-days: 14
           if-no-files-found: ignore

@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException, Query, Request
-from opencg_shared import ConceptDetail, ConceptListItem, TraverseResponse
+from opencg_shared import (
+    ConceptDetail,
+    ConceptListItem,
+    TraverseResponse,
+    extract_context,
+    stage_span,
+)
+from opencg_shared.metrics import observe_stage
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/graph", tags=["graph"])
@@ -125,15 +134,26 @@ async def traverse(
     limit: int = Query(default=50, ge=1, le=200),
     include_candidates: bool = False,
 ) -> TraverseResponse:
+    # The MCP server sends W3C traceparent plus x-correlation-id (no body here).
+    tracer = getattr(request.app.state, "tracer", None)
+    t0 = time.perf_counter()
     try:
-        result = await request.app.state.graph.traverse(
-            tenant=request.app.state.cfg.tenant,
-            concept_id=concept_id,
-            types=_csv(types) or None,
-            depth=depth,
-            limit=limit,
-            include_candidates=include_candidates,
-        )
+        if tracer is None:
+            result = await _run_traverse(
+                request, concept_id, types, depth, limit, include_candidates
+            )
+        else:
+            with stage_span(
+                tracer,
+                "pipeline.graph_traverse",
+                request.headers.get("x-correlation-id"),
+                context=extract_context(request.headers),
+                concept_id=concept_id,
+                depth=depth,
+            ):
+                result = await _run_traverse(
+                    request, concept_id, types, depth, limit, include_candidates
+                )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if result is None:
@@ -141,7 +161,19 @@ async def traverse(
             status_code=404,
             detail={"code": "concept_not_found", "concept_id": concept_id},
         )
+    observe_stage("graph_traverse", time.perf_counter() - t0)
     return TraverseResponse.model_validate(result)
+
+
+async def _run_traverse(request, concept_id, types, depth, limit, include_candidates):
+    return await request.app.state.graph.traverse(
+        tenant=request.app.state.cfg.tenant,
+        concept_id=concept_id,
+        types=_csv(types) or None,
+        depth=depth,
+        limit=limit,
+        include_candidates=include_candidates,
+    )
 
 
 async def _transition_concept(

@@ -102,7 +102,7 @@ class FakeTracer:
         def set_attribute(self, key, value):
             self._attributes[key] = value
 
-    def start_as_current_span(self, name: str):
+    def start_as_current_span(self, name: str, **_kwargs):
         return self._Span(self.attributes)
 
 

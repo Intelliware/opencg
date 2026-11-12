@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 import asyncpg
+from opencg_shared.metrics import record_audit_write
 
 from opencg_pipeline.graph.age import (
     delete_reflected_edge,
@@ -995,6 +996,38 @@ async def _assert_active_vocab(conn: Any, name: str) -> None:
 
 
 async def _write_audit(
+    conn: Any,
+    *,
+    actor: str,
+    tenant: str,
+    target_kind: str,
+    target_id: str,
+    from_state: str | None,
+    to_state: str | None,
+    reason: str | None,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+) -> None:
+    try:
+        await _insert_graph_audit(
+            conn,
+            actor=actor,
+            tenant=tenant,
+            target_kind=target_kind,
+            target_id=target_id,
+            from_state=from_state,
+            to_state=to_state,
+            reason=reason,
+            before=before,
+            after=after,
+        )
+    except Exception:
+        record_audit_write("graph", "error")
+        raise
+    record_audit_write("graph", "ok")
+
+
+async def _insert_graph_audit(
     conn: Any,
     *,
     actor: str,

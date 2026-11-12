@@ -44,7 +44,7 @@ This applies to:
 add-foundation                — full v0 vision (canonical aspiration; delivered per capability by follow-up changes)
 ```
 
-Everything else has shipped and is archived under `openspec/changes/archive/` (including `prepare-open-source-release`, the v0.1.0 release work, and `bootstrap-thin-mvp`, archived as superseded); the merged baseline is in `openspec/specs/`. `main` is protected: changes land through pull requests with one approving review and green `static`, `stack` and `dependency-review` checks.
+Everything else has shipped and is archived under `openspec/changes/archive/` (including `prepare-open-source-release`, the v0.1.0 release work, and `bootstrap-thin-mvp`, archived as superseded); the merged baseline is in `openspec/specs/`. `main` is protected: changes land through pull requests with one approving review and green `static`, `stack`, `observability` and `dependency-review` checks.
 
 Check the live state any time with `openspec list`.
 
@@ -59,11 +59,12 @@ Check the live state any time with `openspec list`.
 | Catalog + audit + graph | PostgreSQL 16 + Apache AGE (graph extension) |
 | Cache | Valkey |
 | Embeddings | Ollama (compose-internal `ollama` service, default `nomic-embed-text`) |
-| Chat / generation | Ollama Cloud (`gemma3:4b` default, used by knowledge-graph text extraction) |
+| Chat / generation | Ollama Cloud (`gemma4:31b` default, used by knowledge-graph text extraction) |
 | Admin UI | Next.js 15 App Router |
 | Storybook | **`@storybook/react-vite`** (NOT `@storybook/nextjs`) |
 | Tests | pytest, vitest, Playwright (admin UI e2e) |
 | Compose | Docker, `dev` profile only |
+| Observability | OpenTelemetry → Collector (always on); Prometheus `v3.15.1`, Tempo `3.1.1`, Grafana `13.2.5` only in the opt-in overlay (`make up-obs`), never in the default stack |
 
 ## Project conventions
 
@@ -74,6 +75,7 @@ Check the live state any time with `openspec list`.
 - **Compose ports**: use `${OPENCG__SERVICE__HOST_PORT:-default}` so collisions can be dodged via `.env`.
 - **Audit logs are append-only**: enforced by triggers on `opencg.audit_log` and `opencg.graph_audit_log`. Don't UPDATE them; write a state-transition row instead.
 - **Token accounting on every model call**: emit an OTel span attribute AND increment `opencg_tokens_total{stage,model,provider,tenant,direction}`. The spec's "per-stage token accounting" requirement is non-negotiable.
+- **Metrics and dashboards**: every service serves `/metrics`; metric families live in `packages/shared-py/src/opencg_shared/metrics.py` (the MCP server mirrors two in `services/mcp-server/src/metrics.ts`). Ingestion runs in Prometheus multiprocess mode, so use only counters and histograms there (a gauge needs a `multiprocess_mode`). Dashboards are JSON in `infra/grafana/dashboards/`; `make check-dashboards` fails on an `opencg_*` metric the shared module doesn't define. The observability overlay is opt-in: never add Prometheus, Tempo or Grafana to the default `dev` stack or the `stack` CI job.
 - **Best-effort extraction**: ingest-time chat-model calls (the knowledge-graph text extractor) MUST NOT fail the ingest on extractor errors. Log + counter + continue.
 
 ## Where stuff lives
@@ -90,8 +92,14 @@ services/ingestion/                 FastAPI + Click CLI
 services/admin-ui/                  Next.js 15 admin UI + Storybook
 infra/postgres/                     Dockerfile + init SQL (010_, 020_, ...)
 infra/ollama/                       entrypoint + healthcheck scripts
+infra/otel/                         collector config (+ otel-collector.tempo.yaml for the overlay)
+infra/prometheus/                   prometheus.yml (observability overlay only)
+infra/tempo/                        tempo.yaml, Tempo 3 monolithic (observability overlay only)
+infra/grafana/                      provisioning/ + dashboards/*.json (observability overlay only)
 infra/compose/docker-compose.yml    the v0 dev profile
-tests/smoke/run.sh                  end-to-end smoke (helpers in tests/smoke/lib.sh)
+infra/compose/docker-compose.observability.yml  opt-in Prometheus/Tempo/Grafana overlay (make up-obs)
+tests/smoke/run.sh                  end-to-end smoke (helpers in tests/smoke/lib.sh); SMOKE_OBS=1 = make smoke-obs
+scripts/                            check-agent-guides.sh, check-dashboards.py (+ tests/)
 services/admin-ui/e2e/              Playwright e2e suite (make e2e)
 .github/                            CI workflow, Dependabot, ruleset, templates
 docs/OPERATIONS.md                  operator runbook
@@ -110,6 +118,7 @@ cp .env.example .env
 make up-d                                                    # build + start
 make ingest-git REPO=https://github.com/anthropics/anthropic-cookbook
 make smoke && make e2e                                       # end-to-end verification
+make up-obs && make smoke-obs                               # OPTIONAL: Prometheus/Tempo/Grafana (Grafana on :3030)
 open http://localhost:3000                                   # admin UI
 ```
 

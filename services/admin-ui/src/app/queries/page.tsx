@@ -33,6 +33,8 @@ export default async function QueriesPage() {
               tokens_out={r.tokens_out}
               latency_ms={r.latency_ms}
               outcome={r.outcome}
+              estimated_cost_usd={r.estimated_cost_usd}
+              usage_by_provider={r.usage_by_provider}
             />
           ))}
         </div>

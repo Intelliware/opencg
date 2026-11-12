@@ -32,4 +32,37 @@ describe("QueryRow", () => {
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "/queries/42");
   });
+
+  it("shows an em dash when the row predates cost recording", () => {
+    render(<QueryRow {...base} />);
+    expect(screen.getByTestId("cost-value")).toHaveTextContent("—");
+  });
+
+  it("shows the estimated cost next to the tokens", () => {
+    render(
+      <QueryRow
+        {...base}
+        estimated_cost_usd={0}
+        usage_by_provider={[
+          { provider: "ollama", model: "nomic-embed-text", tokens_in: 100, tokens_out: 0, cost_usd: 0 },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("cost-value")).toHaveTextContent("$0.00");
+  });
+
+  it("marks a row with unpriced usage", () => {
+    render(
+      <QueryRow
+        {...base}
+        estimated_cost_usd={0.002}
+        usage_by_provider={[
+          { provider: "ollama", model: "nomic-embed-text", tokens_in: 100, tokens_out: 0, cost_usd: 0.002 },
+          { provider: "ollama-cloud", model: "gemma3:4b", tokens_in: 10, tokens_out: 25, cost_usd: null },
+        ]}
+      />,
+    );
+    expect(screen.getByText("$0.002")).toBeInTheDocument();
+    expect(screen.getByText("unpriced")).toBeInTheDocument();
+  });
 });

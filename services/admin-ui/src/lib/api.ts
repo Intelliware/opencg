@@ -3,6 +3,7 @@
 
 import type {
   ConnectorStatus,
+  ProviderUsage,
   Entity,
   EntityListItem,
   EntityListResponse,
@@ -37,6 +38,9 @@ export interface AuditRow {
   latency_ms: number;
   outcome: "ok" | "error";
   error_code?: string | null;
+  /** Null/absent on rows written before cost was recorded. */
+  estimated_cost_usd?: number | null;
+  usage_by_provider?: ProviderUsage[] | null;
 }
 
 // --- Audits ----------------------------------------------------------------
@@ -120,9 +124,15 @@ export interface VectorSearchInput {
   filters?: Record<string, unknown>;
 }
 
+/** The pipeline's vector search response plus its estimated embedding cost. */
+export type VectorSearchResult = VectorSearchResponse & {
+  /** null = unpriced; absent = a pipeline that predates cost recording. */
+  cost_usd?: number | null;
+};
+
 export async function vectorSearch(
   input: VectorSearchInput,
-): Promise<VectorSearchResponse | null> {
+): Promise<VectorSearchResult | null> {
   const res = await fetch(`${PIPELINE_URL}/search/vector`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -130,7 +140,7 @@ export async function vectorSearch(
     cache: "no-store",
   });
   if (!res.ok) return null;
-  return (await res.json()) as VectorSearchResponse;
+  return (await res.json()) as VectorSearchResult;
 }
 
 // --- Ingestion (via pipeline proxy) ----------------------------------------

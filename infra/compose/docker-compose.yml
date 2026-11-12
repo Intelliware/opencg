@@ -153,6 +153,24 @@ services:
       # Derived from the Postgres credentials unless .env sets the URL itself
       # (e.g. to point at an external database).
       OPENCG__POSTGRES__URL: ${OPENCG__POSTGRES__URL:-postgresql://${OPENCG__POSTGRES__USER:-opencg}:${OPENCG__POSTGRES__PASSWORD:-opencg}@postgres:5432/${OPENCG__POSTGRES__DB:-opencg}}
+      # Prometheus multiprocess mode: the server and every CLI process started
+      # with `docker compose exec` (make ingest-git, the smoke) write their
+      # counters here, and the server's /metrics sums them. Container env is
+      # inherited by exec'd processes, so CLI runs pick it up too.
+      PROMETHEUS_MULTIPROC_DIR: /run/opencg-metrics
+    # The multiprocess directory must start empty, or files from an earlier run
+    # would be counted. A tmpfs is recreated empty on every container start;
+    # the command below also clears it explicitly before starting the server
+    # (same server command as the image's CMD).
+    command:
+      - sh
+      - -c
+      - >-
+        rm -rf "$${PROMETHEUS_MULTIPROC_DIR:?}"/* &&
+        exec uv run --package opencg-ingestion uvicorn opencg_ingestion.server:app
+        --host 0.0.0.0 --port 8100
+    tmpfs:
+      - /run/opencg-metrics:mode=1777,size=64m
     depends_on:
       postgres: { condition: service_healthy }
       qdrant:   { condition: service_healthy }

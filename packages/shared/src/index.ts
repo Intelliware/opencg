@@ -35,6 +35,17 @@ export interface StageUsage {
   tokens_in: number;
   tokens_out: number;
   latency_ms: number;
+  /** Estimated USD cost; null when unpriced or the stage made no model call. */
+  cost_usd?: number | null;
+}
+
+/** Usage for one (provider, model) pair. `cost_usd: null` means unpriced, never free. */
+export interface ProviderUsage {
+  provider: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number | null;
 }
 
 export interface UsageEnvelope {
@@ -42,6 +53,11 @@ export interface UsageEnvelope {
   total_tokens_out: number;
   total_latency_ms: number;
   by_stage: readonly StageUsage[];
+  by_provider?: readonly ProviderUsage[];
+  /** Sum of the priced entries in `by_provider`. */
+  estimated_cost_usd?: number;
+  /** False when any `by_provider` entry is unpriced. */
+  cost_complete?: boolean;
 }
 
 export interface RetrievalResponse {
@@ -70,6 +86,9 @@ export interface AuditRecord {
   latency_ms: number;
   outcome: "ok" | "error";
   error_code?: string;
+  /** Null on rows written before cost was recorded. */
+  estimated_cost_usd?: number | null;
+  usage_by_provider?: readonly ProviderUsage[] | null;
 }
 
 export interface IngestEvent {
@@ -153,6 +172,9 @@ export interface VectorSearchResponse {
   model: string;
   provider: string;
   tokens_in: number;
+  /** Estimated USD cost of the query embedding; null when unpriced. */
+  cost_usd?: number | null;
+  usage?: UsageEnvelope;
 }
 
 // --- Admin: ingestion ------------------------------------------------------
