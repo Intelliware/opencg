@@ -8,7 +8,7 @@ COMPOSE_OBS := docker compose -f infra/compose/docker-compose.yml \
 OPENSPEC := npx -y @fission-ai/openspec@1.4.1
 GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1
 
-.PHONY: help bootstrap up up-d up-obs down down-v logs ps test test-mcp test-shared test-pipeline test-ingestion test-ui test-scripts lint typecheck format smoke smoke-cloud smoke-obs e2e e2e-ui ingest-git storybook check-agent-guides check-dashboards openspec-validate secrets-scan ci ci-static ci-stack
+.PHONY: help bootstrap up up-d up-obs down down-v logs ps test test-mcp test-shared test-pipeline test-ingestion test-ui test-scripts lint typecheck format smoke smoke-cloud smoke-obs e2e e2e-ui hydration-stress ingest-git storybook check-agent-guides check-dashboards openspec-validate secrets-scan ci ci-static ci-stack
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -91,6 +91,10 @@ smoke-obs: ## OPTIONAL: smoke + observability overlay checks (Prometheus, Tempo,
 e2e: ## Admin UI end-to-end suite (Playwright); starts the stack first if needed
 	$(COMPOSE) --profile dev up -d --wait --no-recreate
 	pnpm --filter @opencg/admin-ui e2e
+
+hydration-stress: ## Admin UI hydration stress check (needs a seeded stack; BROWSERS=7 CYCLES=30 by default)
+	BROWSERS=$(or $(BROWSERS),7) CYCLES=$(or $(CYCLES),30) \
+		pnpm --filter @opencg/admin-ui exec node scripts/hydration-stress.cjs
 
 e2e-ui: ## Playwright UI mode; leaves the e2e overlay applied between runs
 	$(COMPOSE) --profile dev up -d --wait --no-recreate

@@ -10,6 +10,7 @@ export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- next-themes' documented mounted guard: the theme is only known on the client
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {

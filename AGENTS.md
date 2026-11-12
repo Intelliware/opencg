@@ -54,7 +54,7 @@ Check the live state any time with `openspec list`.
 | Cache | Valkey |
 | Embeddings | Ollama (compose-internal `ollama` service, default `nomic-embed-text`) |
 | Chat / generation | Ollama Cloud (`gemma4:31b` default, used by knowledge-graph text extraction) |
-| Admin UI | Next.js 15 App Router |
+| Admin UI | Next.js 16 App Router (React 19) |
 | Storybook | **`@storybook/react-vite`** (NOT `@storybook/nextjs`) |
 | Tests | pytest, vitest, Playwright (admin UI e2e) |
 | Compose | Docker, `dev` profile only |
@@ -83,7 +83,7 @@ packages/shared-py/                 Python mirrors + OTel + Prom + config loader
 services/mcp-server/                TS stdio MCP server + HTTP health endpoints
 services/pipeline/                  FastAPI retrieve + admin + (soon) graph routes
 services/ingestion/                 FastAPI + Click CLI
-services/admin-ui/                  Next.js 15 admin UI + Storybook
+services/admin-ui/                  Next.js 16 admin UI + Storybook
 infra/postgres/                     Dockerfile + init SQL (010_, 020_, ...)
 infra/ollama/                       entrypoint + healthcheck scripts
 infra/otel/                         collector config (+ otel-collector.tempo.yaml for the overlay)
@@ -94,7 +94,7 @@ infra/compose/docker-compose.yml    the v0 dev profile
 infra/compose/docker-compose.observability.yml  opt-in Prometheus/Tempo/Grafana overlay (make up-obs)
 tests/smoke/run.sh                  end-to-end smoke (helpers in tests/smoke/lib.sh); SMOKE_OBS=1 = make smoke-obs
 scripts/                            check-agent-guides.sh, check-dashboards.py (+ tests/)
-services/admin-ui/e2e/              Playwright e2e suite (make e2e)
+services/admin-ui/e2e/              Playwright e2e suite (make e2e); scripts/hydration-stress.cjs (make hydration-stress)
 .github/                            CI workflow, Dependabot, ruleset, templates
 docs/OPERATIONS.md                  operator runbook
 ```
@@ -124,7 +124,8 @@ Admin UI pages: `/` (overview), `/graph`, `/vectors`, `/entities`, `/queries`, `
 - **Ollama image tags** are `0.30.x`. There is no `0.5` tag.
 - **Postgres init script ordering**: our SQL files start at `010_` so Apache AGE's own bundled `00-create-extension-age.sql` runs first. Don't rename our files back to `00X_` or you'll fight a duplicate-extension error.
 - **`uv sync --package X --package Y` does not work**. Use `uv sync --all-packages` or one `--package` at a time.
-- **Storybook 8 + Next 15.5**: incompatible (`@storybook/nextjs` chokes on a webpack hook). We use `@storybook/react-vite` with tiny `next/link` + `next/navigation` mocks in `.storybook/mocks/`.
+- **Storybook 8 + Next**: `@storybook/nextjs` chokes on a Next webpack hook (found on 15.5). We use `@storybook/react-vite` with tiny `next/link` + `next/navigation` mocks in `.storybook/mocks/`.
+- **Bumping Next.js**: `next build` rewrites `services/admin-ui/tsconfig.json` and `next-env.d.ts`; commit them with the bump. Run the full `make hydration-stress` on every Next or React bump (issue #2 only showed under concurrent load).
 - **Compose shell-var escaping**: use `$$VAR` inside healthcheck CMD-SHELL strings so the container shell — not docker compose — evaluates the substitution.
 - **Port 8080 collision** on the user's machine (something called `nominatim` runs there). The MCP server uses host port 8181, configurable via `OPENCG__MCP__HOST_PORT`.
 - **asyncpg + JSONB columns**: serialise dicts with `json.dumps(...)` before binding. Otherwise: `invalid input for query argument: expected str, got dict`.

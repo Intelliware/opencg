@@ -7,7 +7,7 @@
 // There is no per-user identity: replace with a real identity provider (see
 // add-foundation) before any multi-user or internet-facing deployment.
 //
-// Uses Web Crypto only, so it runs in both the middleware (edge) and Node.
+// Uses Web Crypto only, so it runs in the Next proxy (Node runtime) and in route handlers.
 
 import { NextResponse } from "next/server";
 

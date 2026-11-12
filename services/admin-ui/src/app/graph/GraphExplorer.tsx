@@ -107,6 +107,7 @@ export function GraphExplorer({
     // override a sidebar navigation the user started in the meantime.
     syncUrl(focus, depth, includeCandidates);
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch this effect starts; the result arrives asynchronously
     setLoading(true);
     setError(null);
     fetchTraverse(focus, depth, includeCandidates)
@@ -124,6 +125,7 @@ export function GraphExplorer({
   // Load the detail card for the selected concept.
   useEffect(() => {
     if (!selectedId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the detail card when the selection is cleared; no fetch to run
       setDetail(null);
       return;
     }
