@@ -23,10 +23,10 @@ def make_client(monkeypatch):
     def _build(ingest: Callable | None = None):
         app = srv.app
 
-        async def default_ingest(repo_url: str, cfg: openCGConfig):
+        async def default_ingest(repo_url: str, cfg: openCGConfig, **_kwargs):
             return (1, 2)
 
-        async def chosen_ingest(repo_url: str, cfg: openCGConfig):
+        async def chosen_ingest(repo_url: str, cfg: openCGConfig, **_kwargs):
             if ingest is None:
                 return await default_ingest(repo_url, cfg)
             return await ingest(repo_url, cfg)
@@ -114,3 +114,22 @@ def test_run_git_rejects_unsafe_repo_url_without_creating_a_run(make_client, rep
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "repo_url_rejected"
     assert client.get("/runs/recent").json() == []
+
+
+def test_metrics_serves_multiprocess_registry(make_client, monkeypatch, tmp_path):
+    """CLI runs write to PROMETHEUS_MULTIPROC_DIR; the server's /metrics sums them."""
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "PROMETHEUS_MULTIPROC_DIR": str(tmp_path)}
+    code = (
+        "from opencg_shared.metrics import record_ingestion_run;"
+        "record_ingestion_run(connector='git', status='succeeded', documents=4, chunks=9)"
+    )
+    subprocess.run([sys.executable, "-c", code], env=env, check=True)
+    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path))
+    resp = make_client().get("/metrics")
+    assert resp.status_code == 200
+    assert 'opencg_ingestion_runs_total{connector="git",status="succeeded"} 1.0' in resp.text
+    assert 'opencg_ingestion_documents_total{connector="git"} 4.0' in resp.text

@@ -61,7 +61,7 @@ class _Span:
 
 
 class _Tracer:
-    def start_as_current_span(self, name: str) -> _Span:
+    def start_as_current_span(self, name: str, **_kwargs) -> _Span:
         return _Span()
 
 

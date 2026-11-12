@@ -16,18 +16,21 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from opencg_pipeline.providers import OllamaEmbeddings
 from opencg_pipeline.storage.catalog import CatalogStore
 from opencg_shared import (
     ConnectorStatus,
     IngestionRun,
     load_config,
+    metrics_app,
     openCGConfig,
     setup_otel,
 )
+from opencg_shared.otel import CORRELATION_HEADER, tag_request_span
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
+from starlette.routing import Route
 
 from opencg_ingestion.pipeline_runner import run as ingest_run
 from opencg_ingestion.repo_url import RepoUrlError, validate_repo_url
@@ -46,7 +49,11 @@ _DEFERRED_REASONS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()
-    setup_otel("opencg-ingestion", cfg.telemetry.service_namespace)
+    setup_otel(
+        "opencg-ingestion",
+        cfg.telemetry.service_namespace,
+        config_endpoint=cfg.telemetry.otlp_endpoint,
+    )
     runs = RunStore(cap=100)
     catalog = CatalogStore(cfg.postgres.url)
     await catalog.connect()
@@ -60,6 +67,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="opencg-ingestion", lifespan=lifespan)
+app.router.routes.append(Route("/metrics", metrics_app))
+
+
+@app.middleware("http")
+async def _tag_correlation_id(request: Request, call_next):
+    # FastAPI traces each request itself; tag its span so it (and, through
+    # CorrelationIdSpanProcessor, its children) carry the caller's ID.
+    tag_request_span(request.headers.get(CORRELATION_HEADER))
+    return await call_next(request)
 
 
 @app.get("/healthz")
@@ -89,6 +105,7 @@ async def readyz() -> dict:
         base_url=cfg.ollama.base_url,
         model=cfg.ollama.embedding_model,
         api_key=cfg.ollama.api_key,
+        provider=cfg.embeddings_endpoint().provider,
     )
     try:
         await embeddings.embed("readyz")
@@ -132,7 +149,7 @@ async def run_git(req: GitRunRequest, bg: BackgroundTasks) -> IngestionRun:
     async def task() -> None:
         try:
             await runs.update(run.run_id, status="running")
-            parents, chunks = await ingest_run(req.repo_url, cfg)
+            parents, chunks = await ingest_run(req.repo_url, cfg, run_id=run.run_id)
             await runs.update(
                 run.run_id,
                 status="succeeded",

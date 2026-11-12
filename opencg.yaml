@@ -47,7 +47,9 @@ providers:
   # Chat is independently configurable and defaults to Ollama Cloud. Supply
   # the key through OPENCG__PROVIDERS__CHAT__API_KEY.
   chat:
-    provider: ollama
+    # `provider` is the label for metrics and pricing. Ollama Cloud is
+    # `ollama-cloud`; it uses the same Ollama adapter as local `ollama`.
+    provider: ollama-cloud
     base_url: https://ollama.com
     model: gemma3:4b
     api_key: null
@@ -66,6 +68,150 @@ retrieval:
 audit:
   # Retention in days. 0 disables pruning.
   retention_days: 90
+
+observability:
+  # Cost estimation. USD per 1,000 tokens, keyed by the endpoint's `provider`
+  # label and model. A (provider, model) pair with no row is still counted —
+  # in opencg_cost_unpriced_tokens_total — and shown as "unpriced", never $0.
+  # Every row needs `source` and `as_of` so readers can tell where a price
+  # came from and how old it is. See docs/OPERATIONS.md "Pricing" to refresh.
+  pricing:
+    - provider: ollama
+      model: nomic-embed-text
+      input_usd_per_1k: 0
+      output_usd_per_1k: 0
+      source: compose-local Ollama container; no per-token charge
+      as_of: 2026-11-12
+    # Ollama Cloud publishes per-token rates (USD per million; divided by 1,000
+    # here). Standard (peak) input and output rates; cached-input and off-peak
+    # discounts are not modelled. gemma3:4b, the default chat model, is not on
+    # the price list as of 2026-11-12, so it shows as unpriced.
+    - provider: ollama-cloud
+      model: "beam"
+      input_usd_per_1k: 0.000125
+      output_usd_per_1k: 0.0004
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "deepseek-v4.1-flash"
+      input_usd_per_1k: 0.0003
+      output_usd_per_1k: 0.0012
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "deepseek-v4-pro"
+      input_usd_per_1k: 0.00132
+      output_usd_per_1k: 0.00396
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "gemma4"
+      input_usd_per_1k: 0.00014
+      output_usd_per_1k: 0.0004
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "glm-5.3"
+      input_usd_per_1k: 0.0014
+      output_usd_per_1k: 0.0044
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "glm-5.3-flash"
+      input_usd_per_1k: 0.00015
+      output_usd_per_1k: 0.0005
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "glm-5.2"
+      input_usd_per_1k: 0.0014
+      output_usd_per_1k: 0.0044
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "gpt-oss:120b"
+      input_usd_per_1k: 0.00015
+      output_usd_per_1k: 0.0006
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "gpt-oss:20b"
+      input_usd_per_1k: 0.00007
+      output_usd_per_1k: 0.0003
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "kimi-k3.1-pro"
+      input_usd_per_1k: 0.002
+      output_usd_per_1k: 0.01
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "kimi-k3"
+      input_usd_per_1k: 0.003
+      output_usd_per_1k: 0.015
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "kimi-k2.7-code"
+      input_usd_per_1k: 0.00095
+      output_usd_per_1k: 0.004
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "kimi-k2.6"
+      input_usd_per_1k: 0.00095
+      output_usd_per_1k: 0.004
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "mimo-v2.6-flash"
+      input_usd_per_1k: 0.00014
+      output_usd_per_1k: 0.00028
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "mimo-v2.6-pro"
+      input_usd_per_1k: 0.000435
+      output_usd_per_1k: 0.00087
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "minimax-m3.1-flash"
+      input_usd_per_1k: 0.00015
+      output_usd_per_1k: 0.0006
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "minimax-m3"
+      input_usd_per_1k: 0.0006
+      output_usd_per_1k: 0.0024
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "mistral-large-4"
+      input_usd_per_1k: 0.0007
+      output_usd_per_1k: 0.0021
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "muse-spark-open"
+      input_usd_per_1k: 0.00125
+      output_usd_per_1k: 0.00425
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "nemotron-3-super"
+      input_usd_per_1k: 0.000015
+      output_usd_per_1k: 0.0006
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "nemotron-3-ultra"
+      input_usd_per_1k: 0.0001
+      output_usd_per_1k: 0.003
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
 
 telemetry:
   otlp_endpoint: http://otel-collector:4318

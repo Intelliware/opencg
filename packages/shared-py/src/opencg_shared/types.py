@@ -43,6 +43,18 @@ class StageUsage(BaseModel):
     tokens_in: int = 0
     tokens_out: int = 0
     latency_ms: int = 0
+    # Estimated USD cost; None when the (provider, model) pair is unpriced
+    # or the stage made no model call.
+    cost_usd: float | None = None
+
+
+class ProviderUsage(BaseModel):
+    provider: str
+    model: str
+    tokens_in: int = 0
+    tokens_out: int = 0
+    # None means unpriced (no price entry), never "free".
+    cost_usd: float | None = None
 
 
 class UsageEnvelope(BaseModel):
@@ -50,6 +62,44 @@ class UsageEnvelope(BaseModel):
     total_tokens_out: int = 0
     total_latency_ms: int = 0
     by_stage: list[StageUsage] = Field(default_factory=list)
+    by_provider: list[ProviderUsage] = Field(default_factory=list)
+    # Sum of the priced entries in by_provider.
+    estimated_cost_usd: float = 0.0
+    # False when any by_provider entry is unpriced.
+    cost_complete: bool = True
+
+
+def summarise_by_provider(stages: list[StageUsage]) -> tuple[list[ProviderUsage], float, bool]:
+    """Fold model-calling stages into one entry per (provider, model).
+
+    Returns (by_provider, estimated_cost_usd, cost_complete). Stages without a
+    provider and model (no model call) are skipped.
+    """
+    order: list[tuple[str, str]] = []
+    acc: dict[tuple[str, str], ProviderUsage] = {}
+    unpriced: set[tuple[str, str]] = set()
+    for st in stages:
+        if not st.provider or not st.model:
+            continue
+        key = (st.provider, st.model)
+        if key not in acc:
+            order.append(key)
+            acc[key] = ProviderUsage(provider=st.provider, model=st.model, cost_usd=0.0)
+        entry = acc[key]
+        entry.tokens_in += st.tokens_in
+        entry.tokens_out += st.tokens_out
+        if st.cost_usd is None:
+            unpriced.add(key)
+        else:
+            entry.cost_usd = (entry.cost_usd or 0.0) + st.cost_usd
+    for key in unpriced:
+        acc[key].cost_usd = None
+    by_provider = [acc[k] for k in order]
+    for entry in by_provider:
+        if entry.cost_usd is not None:
+            entry.cost_usd = round(entry.cost_usd, 6)
+    total = round(sum(e.cost_usd for e in by_provider if e.cost_usd is not None), 6)
+    return by_provider, total, not unpriced
 
 
 class RetrievalResponse(BaseModel):
@@ -78,6 +128,9 @@ class AuditRecord(BaseModel):
     latency_ms: int
     outcome: Literal["ok", "error"]
     error_code: str | None = None
+    # Null on rows written before cost was recorded.
+    estimated_cost_usd: float | None = None
+    usage_by_provider: list[ProviderUsage] | None = None
 
 
 class IngestEvent(BaseModel):
@@ -163,6 +216,9 @@ class VectorSearchResponse(BaseModel):
     model: str
     provider: str
     tokens_in: int
+    # Estimated USD cost of the query embedding; None when unpriced.
+    cost_usd: float | None = None
+    usage: UsageEnvelope | None = None
 
 
 # --- Admin: ingestion ------------------------------------------------------

@@ -1,0 +1,29 @@
+# Merged on top of otel-collector.yaml by the opt-in observability overlay
+# (infra/compose/docker-compose.observability.yml), which starts the collector
+# with `--config=otel-collector.yaml --config=otel-collector.tempo.yaml`.
+#
+# The collector merges maps key by key but REPLACES lists, so the traces
+# pipeline restates every exporter: `debug` stays (the default smoke greps the
+# collector log for spans) and `otlp/tempo` is added.
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      exporters: [debug, otlp/tempo]
+  telemetry:
+    metrics:
+      # The collector's own metrics for Prometheus to scrape on :8888. Since
+      # v0.111 the default listener is localhost-only, so bind it explicitly.
+      # Port 8888 is compose-internal and never published to the host.
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888

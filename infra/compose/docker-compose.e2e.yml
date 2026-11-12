@@ -12,6 +12,7 @@ services:
       # "Run now" from the UI ingests with the service's own settings; keep
       # extraction on the deterministic stub so the suite never calls a provider.
       OPENCG__PROVIDERS__CHAT__BASE_URL: http://smoke-chat:11434
+      OPENCG__PROVIDERS__CHAT__PROVIDER: ollama
       OPENCG__PROVIDERS__CHAT__MODEL: smoke-chat
       OPENCG__PROVIDERS__CHAT__API_KEY: ""
 

@@ -2,7 +2,7 @@
 
 from opencg_shared.config import load_config, openCGConfig
 from opencg_shared.metrics import metrics_app, record_request, record_stage_tokens
-from opencg_shared.otel import setup_otel
+from opencg_shared.otel import extract_context, setup_otel, stage_span
 from opencg_shared.types import (
     AuditRecord,
     Concept,
@@ -26,6 +26,7 @@ from opencg_shared.types import (
     IngestionRun,
     IngestionRunStatus,
     Neighbour,
+    ProviderUsage,
     RelationshipEdge,
     RelationshipType,
     RetrievalRequest,
@@ -36,6 +37,7 @@ from opencg_shared.types import (
     UsageEnvelope,
     VectorSearchHit,
     VectorSearchResponse,
+    summarise_by_provider,
 )
 
 __all__ = [
@@ -61,6 +63,7 @@ __all__ = [
     "IngestionRun",
     "IngestionRunStatus",
     "Neighbour",
+    "ProviderUsage",
     "RelationshipEdge",
     "RelationshipType",
     "RetrievalRequest",
@@ -71,10 +74,13 @@ __all__ = [
     "UsageEnvelope",
     "VectorSearchHit",
     "VectorSearchResponse",
+    "extract_context",
     "load_config",
     "metrics_app",
     "openCGConfig",
     "record_request",
     "record_stage_tokens",
     "setup_otel",
+    "stage_span",
+    "summarise_by_provider",
 ]

@@ -14,6 +14,8 @@ class _Embedding:
     vector: list[float]
     tokens_in: int = 3
     model: str = "nomic-embed-text"
+    provider: str = "ollama"
+    cost_usd: float | None = 0.0
 
 
 class _Embeddings:

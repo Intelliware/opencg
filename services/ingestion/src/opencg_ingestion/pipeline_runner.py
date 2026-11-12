@@ -21,7 +21,9 @@ from opencg_pipeline.graph.extract import extract_for_chunk
 from opencg_pipeline.providers import OllamaChat, OllamaEmbeddings
 from opencg_pipeline.storage.catalog import CatalogStore
 from opencg_pipeline.storage.vector import VectorIndex
-from opencg_shared import openCGConfig, setup_otel
+from opencg_shared import openCGConfig, record_stage_tokens, setup_otel, stage_span
+from opencg_shared.metrics import record_ingestion_run
+from opencg_shared.otel import current_correlation_id
 from opentelemetry import trace
 
 from opencg_ingestion.chunking import chunk_code_by_symbols, chunk_text, is_code_path
@@ -53,9 +55,19 @@ async def ingest_documents(
     cfg: openCGConfig,
     max_documents: int | None = None,
     max_chunks: int | None = None,
+    run_id: str | None = None,
 ) -> IngestionSummary:
-    """Ingest documents, optionally stopping at deterministic smoke/canary bounds."""
-    tracer = setup_otel("opencg-ingestion", cfg.telemetry.service_namespace)
+    """Ingest documents, optionally stopping at deterministic smoke/canary bounds.
+
+    Every span of the run carries `correlation_id = run_id` (generated when
+    the caller doesn't pass one).
+    """
+    run_id = run_id or f"ingest-{uuid.uuid4()}"
+    tracer = setup_otel(
+        "opencg-ingestion",
+        cfg.telemetry.service_namespace,
+        config_endpoint=cfg.telemetry.otlp_endpoint,
+    )
     catalog = CatalogStore(cfg.postgres.url)
     vector = VectorIndex(
         url=cfg.qdrant.url,
@@ -67,6 +79,7 @@ async def ingest_documents(
         base_url=cfg.ollama.base_url,
         model=cfg.ollama.embedding_model,
         api_key=cfg.ollama.api_key,
+        provider=cfg.embeddings_endpoint().provider,
     )
     # Chat client for LLM-based text extraction. The text extractor is the
     # only caller; for code files we use graphifyy and skip chat entirely.
@@ -78,6 +91,7 @@ async def ingest_documents(
             base_url=chat_cfg.base_url,
             model=chat_cfg.model,
             api_key=chat_cfg.api_key,
+            provider=chat_cfg.provider,
         )
     await catalog.connect()
     if chat is not None:
@@ -90,6 +104,12 @@ async def ingest_documents(
     chunks_total = 0
     documents_truncated = False
     chunks_truncated = False
+    # One root span per run; entered by hand so the long loop below keeps its
+    # indentation. Closed in the `finally`.
+    run_cm = tracer.start_as_current_span("ingestion.run")
+    run_span = run_cm.__enter__()
+    run_span.set_attribute("correlation_id", run_id)
+    run_span.set_attribute("connector", "git")
     try:
         await vector.ensure_collection("git")
         for doc_index, doc in enumerate(docs):
@@ -160,6 +180,14 @@ async def ingest_documents(
                 except httpx.HTTPError as exc:
                     log.error("embed failed for %s chunk %d: %s", doc.source_uri, ch_index, exc)
                     continue
+                record_stage_tokens(
+                    stage="ingest_embed",
+                    tenant=cfg.tenant,
+                    tokens_in=emb.tokens_in,
+                    tokens_out=0,
+                    model=emb.model,
+                    provider=emb.provider,
+                )
                 payload = {
                     "tenant": cfg.tenant,
                     "entity_id": chunk_id,
@@ -226,6 +254,9 @@ async def ingest_documents(
                 except Exception as exc:
                     log.warning("graph_writer failed for %s: %s", doc.source_uri, exc)
     finally:
+        run_span.set_attribute("documents", parents)
+        run_span.set_attribute("chunks", chunks_total)
+        run_cm.__exit__(None, None, None)
         await catalog.close()
         await vector.close()
         await embeddings.close()
@@ -292,7 +323,7 @@ async def _extract_code(
     import graphify.extract as gex
 
     start = time.perf_counter()
-    with tracer.start_as_current_span("pipeline.graph_extract_code") as span:
+    with stage_span(tracer, "pipeline.graph_extract_code", current_correlation_id()) as span:
         span.set_attribute("model", "graphifyy")
         span.set_attribute("provider", "graphifyy")
         span.set_attribute(
@@ -347,17 +378,35 @@ async def run(
     *,
     max_documents: int | None = None,
     max_chunks: int | None = None,
+    run_id: str | None = None,
 ) -> IngestionSummary:
+    """Clone, walk and ingest one repository; counts the run per connector."""
     from opencg_ingestion.connectors.git import ingest_repo
 
-    docs = list(ingest_repo(repo_url, cfg.tenant))
-    log.info("ingesting %d documents from %s", len(docs), repo_url)
-    return await ingest_documents(
-        docs,
-        cfg=cfg,
-        max_documents=max_documents,
-        max_chunks=max_chunks,
+    started = time.perf_counter()
+    try:
+        docs = list(ingest_repo(repo_url, cfg.tenant))
+        log.info("ingesting %d documents from %s", len(docs), repo_url)
+        summary = await ingest_documents(
+            docs,
+            cfg=cfg,
+            max_documents=max_documents,
+            max_chunks=max_chunks,
+            run_id=run_id,
+        )
+    except BaseException:
+        record_ingestion_run(
+            connector="git", status="failed", duration_seconds=time.perf_counter() - started
+        )
+        raise
+    record_ingestion_run(
+        connector="git",
+        status="succeeded",
+        documents=summary.parents,
+        chunks=summary.chunks,
+        duration_seconds=time.perf_counter() - started,
     )
+    return summary
 
 
 def run_sync(

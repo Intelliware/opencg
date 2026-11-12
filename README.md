@@ -62,10 +62,10 @@ The thin MVP, the first end-to-end working slice, runs in Docker Compose, with a
 | Embeddings | Ollama (`nomic-embed-text`, compose-internal) |
 | Chat / extraction | Ollama Cloud (`gemma3:4b` default) |
 | Admin UI | Next.js 15 (App Router) + Storybook |
-| Observability | OpenTelemetry → compose-local Collector (Tempo/Grafana is a follow-up) |
+| Observability | OpenTelemetry → Collector → Tempo, Prometheus, Grafana (opt-in: `make up-obs`); `/metrics` on every service |
 | Tests | pytest, vitest, Playwright (admin UI end-to-end), a deterministic smoke script |
 | Deployment | Docker Compose (`dev` profile; smoke and e2e overlays for tests) |
-| CI | GitHub Actions: `static`, `dependency-review`, full-stack `stack`; Dependabot |
+| CI | GitHub Actions: `static`, `dependency-review`, full-stack `stack`, `observability`; Dependabot |
 
 ## Quickstart
 
@@ -93,9 +93,19 @@ curl -sS -X POST http://localhost:8000/retrieve \
 open http://localhost:3000
 ```
 
+**Optional: observability.** Prometheus, Tempo and Grafana are not part of the default stack. To add them (about 700 MB more RAM), run:
+
+```bash
+make up-obs                    # the dev stack plus the observability overlay
+open http://localhost:3030     # Grafana: sign in as admin / admin (set OPENCG__GRAFANA__ADMIN_PASSWORD)
+make down                      # stops everything, overlay included
+```
+
+Grafana opens on six "openCG" dashboards (requests, stages, tokens and cost, ingestion, audit, providers), and Tempo finds any MCP call by its `correlation_id`. Without the overlay every service still serves `/metrics` and the collector still logs spans. See [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#observability).
+
 Every port binds to `127.0.0.1` and can be moved in `.env` if it collides with something already running (see [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#network-exposure-and-host-ports)). To work on the code, start with [`CONTRIBUTING.md`](./CONTRIBUTING.md) and `make bootstrap`.
 
-Run the deterministic full-stack verification with `make smoke`. It builds a temporary local Git fixture, uses local embeddings plus an Ollama-compatible chat stub, verifies OTel spans, and enforces a five-minute deadline. A real-provider canary is opt-in via `make smoke-cloud` and is capped at one document and two chunks.
+Run the deterministic full-stack verification with `make smoke`. It builds a temporary local Git fixture, uses local embeddings plus an Ollama-compatible chat stub, verifies OTel spans and every service's `/metrics`, and enforces a five-minute deadline. `make smoke-obs` runs it with the optional observability overlay and also checks Prometheus, Tempo and Grafana. A real-provider canary is opt-in via `make smoke-cloud` and is capped at one document and two chunks.
 
 ## Connect your AI tools (MCP)
 
@@ -231,10 +241,10 @@ Every shared component has a Storybook story neighbour.
 - **Python ingestion** (`services/ingestion`) with a `opencg-ingest git <url>` CLI: clone, chunk, embed, write Postgres + Qdrant, derive code relationships with graphifyy, and extract candidate text relationships with the configured chat model.
 - **Next.js admin UI** (`services/admin-ui`) with query, vector, content, ingestion, and graph-review pages.
 - **Storage**: Postgres 16 + Apache AGE for catalog, audit, and the named knowledge graph; Qdrant for vectors; Valkey for cache; compose-internal Ollama for embeddings.
-- **Observability**: per-stage OTel spans carrying token attributes; Prometheus counters at the pipeline's `/metrics`; a compose-local OTel Collector that accepts and logs development traces.
+- **Observability**: one OTel trace per MCP tool call across the MCP server and pipeline, with `correlation_id` on every span and a child span per model call; `/metrics` on the pipeline, ingestion and MCP server; token usage and estimated cost per provider in every usage envelope, audit row and admin UI view; a compose-local OTel Collector. Prometheus, Tempo and Grafana with six dashboards are an opt-in overlay (`make up-obs`).
 - **Immutable audit log** at `opencg.audit_log` (range-partitioned on `created_at`, with a row-level immutability trigger).
 
-**Not in v0:** intent classifier, OPA enforcement, Confluence/custom-API/web connectors, background enrichment workers, the Tempo/Loki/Prometheus/Grafana stack, a `local-prod` compose profile, and real auth.
+**Not in v0:** intent classifier, OPA enforcement, Confluence/custom-API/web connectors, background enrichment workers, log aggregation (Loki, planned as `add-log-aggregation`), alerting, a `local-prod` compose profile, and real auth.
 
 ## API reference
 
@@ -352,15 +362,15 @@ Provisioned for caching, unused in v0.
 |---|---|---|
 | Lint, type-check, unit tests, Storybook build | `make lint`, `make typecheck`, `make test`, `make storybook` (or `make ci-static` for all of them) | no |
 | Smoke (deterministic end-to-end) | `make smoke` | yes |
+| Observability smoke (optional overlay: Prometheus, Tempo, Grafana) | `make smoke-obs` | yes, with `make up-obs` |
 | Admin UI end-to-end (Playwright, Chromium) | `make e2e` (`make e2e-ui` for UI mode) | started if needed |
 | Everything CI runs | `make ci` | yes |
 
-CI runs `static` and `dependency-review` on every pull request, and the full-stack `stack` job (smoke plus e2e) on pull requests into `main`, nightly, and on demand. [`CONTRIBUTING.md`](./CONTRIBUTING.md#tests) explains each tier and how the e2e suite isolates its data.
+CI runs `static` and `dependency-review` on every pull request, and the full-stack `stack` job (smoke plus e2e) on pull requests into `main`, nightly, and on demand. The `observability` job (`make smoke-obs`) runs on every pull request into `main`, on pushes to `main` and nightly, in parallel with `stack`. [`CONTRIBUTING.md`](./CONTRIBUTING.md#tests) explains each tier and how the e2e suite isolates its data.
 
 ## Known issues
 
 - **Intermittent hydration error.** About 1 in 100 production page loads logs React error #418, most often on `/entities`. The page recovers on its own. The e2e suite retries once and annotates the report ([#2](https://github.com/Intelliware/opencg/issues/2)).
-- **Ingestion metrics aren't exposed.** The ingestion service counts tokens for its embedding and extraction calls, but serves no `/metrics` endpoint, so those counters can't be scraped. Its OTel spans carry the same token attributes.
 - **Audit partitioning is planned, not active.** Every audit row lands in the default partition until weekly partitions are pre-created.
 - **No schema migrations.** Changing an init script needs a fresh volume (`make down-v`).
 - **Run history is in memory.** The ingestion run list clears when the service restarts.

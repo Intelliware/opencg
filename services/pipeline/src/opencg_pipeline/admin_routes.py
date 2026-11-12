@@ -10,6 +10,7 @@ ingestion service over the compose network.
 from __future__ import annotations
 
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -21,10 +22,15 @@ from opencg_shared import (
     EntityListItem,
     EntityListResponse,
     EntityRef,
+    StageUsage,
+    UsageEnvelope,
     VectorSearchHit,
     VectorSearchResponse,
+    extract_context,
     record_stage_tokens,
+    summarise_by_provider,
 )
+from opencg_shared.metrics import observe_stage
 from pydantic import BaseModel, Field
 
 from opencg_pipeline.stages.hybrid_retrieval import drop_tombstoned, overfetch_limit
@@ -110,8 +116,12 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
     vector_index = request.app.state.vector
     tracer = request.app.state.tracer
     cfg = request.app.state.cfg
+    correlation_id = request.headers.get("x-correlation-id") or f"vector-{uuid.uuid4()}"
 
-    with tracer.start_as_current_span("pipeline.vector_search") as span:
+    with tracer.start_as_current_span(
+        "pipeline.vector_search", context=extract_context(request.headers)
+    ) as span:
+        span.set_attribute("correlation_id", correlation_id)
         t0 = time.perf_counter()
         emb = await embeddings.embed(payload.query)
         hits = await vector_index.search_all(
@@ -127,8 +137,9 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("hits", len(hits))
         span.set_attribute("tombstoned_filtered", tombstoned_filtered)
+    observe_stage("vector_search", time.perf_counter() - t0)
 
-    record_stage_tokens(
+    cost = record_stage_tokens(
         stage="vector_search",
         tenant=cfg.tenant,
         tokens_in=emb.tokens_in,
@@ -136,6 +147,18 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         model=emb.model,
         provider=emb.provider,
     )
+
+    stages = [
+        StageUsage(
+            stage="vector_search",
+            model=emb.model,
+            provider=emb.provider,
+            tokens_in=emb.tokens_in,
+            latency_ms=latency_ms,
+            cost_usd=cost,
+        )
+    ]
+    by_provider, estimated, complete = summarise_by_provider(stages)
 
     return VectorSearchResponse(
         hits=[
@@ -154,6 +177,15 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         model=emb.model,
         provider=emb.provider,
         tokens_in=emb.tokens_in,
+        cost_usd=cost,
+        usage=UsageEnvelope(
+            total_tokens_in=emb.tokens_in,
+            total_latency_ms=latency_ms,
+            by_stage=stages,
+            by_provider=by_provider,
+            estimated_cost_usd=estimated,
+            cost_complete=complete,
+        ),
     )
 
 

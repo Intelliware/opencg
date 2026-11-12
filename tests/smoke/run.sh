@@ -8,7 +8,20 @@ source "$ROOT/tests/smoke/lib.sh"
 
 PIPELINE_URL="${PIPELINE_URL:-http://localhost:$(cfg OPENCG__PIPELINE__HOST_PORT 8000)}"
 QDRANT_URL="${QDRANT_URL:-http://localhost:$(cfg OPENCG__QDRANT__HOST_PORT 6333)}"
-SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
+INGESTION_URL="${INGESTION_URL:-http://localhost:$(cfg OPENCG__INGESTION__HOST_PORT 8100)}"
+MCP_URL="${MCP_URL:-http://localhost:$(cfg OPENCG__MCP__HOST_PORT 8181)}"
+# SMOKE_OBS=1 (`make smoke-obs`) also applies the OPTIONAL observability overlay
+# and checks Prometheus, Tempo and Grafana after the default smoke.
+SMOKE_OBS="${SMOKE_OBS:-0}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-http://localhost:$(cfg OPENCG__PROMETHEUS__HOST_PORT 9090)}"
+TEMPO_URL="${TEMPO_URL:-http://localhost:$(cfg OPENCG__TEMPO__HOST_PORT 3200)}"
+GRAFANA_URL="${GRAFANA_URL:-http://localhost:$(cfg OPENCG__GRAFANA__HOST_PORT 3030)}"
+SMOKE_OBS_WAIT_SECONDS="${SMOKE_OBS_WAIT_SECONDS:-120}"
+if [ "$SMOKE_OBS" = "1" ]; then
+  SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-600}"
+else
+  SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-300}"
+fi
 SMOKE_INGEST_TIMEOUT_SECONDS="${SMOKE_INGEST_TIMEOUT_SECONDS:-120}"
 SMOKE_CHAT_MODE="${SMOKE_CHAT_MODE:-stub}"
 RUN_ID="$(date -u +%Y%m%d%H%M%S)-$$"
@@ -44,6 +57,9 @@ case "$SMOKE_CHAT_MODE" in
   stub | cloud) ;;
   *) fail "SMOKE_CHAT_MODE must be 'stub' or 'cloud'" ;;
 esac
+if [ "$SMOKE_OBS" = "1" ] && [ "$SMOKE_CHAT_MODE" != "stub" ]; then
+  fail "smoke-obs runs with the deterministic chat stub only (SMOKE_CHAT_MODE=stub)"
+fi
 
 kill_ingestion_children() {
   "${COMPOSE[@]}" exec -T ingestion sh -c '
@@ -122,8 +138,27 @@ psql_value() {
     | tr -d '\r'
 }
 
-say "Apply the smoke overlay (chat stub + fixture mount)"
-"${COMPOSE[@]}" up -d --wait smoke-chat ingestion
+# Wait until COMMAND succeeds, at most SECONDS; print its last output.
+wait_until() {
+  local seconds=$1
+  shift
+  local deadline=$((SECONDS + seconds))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if "$@"; then
+      return 0
+    fi
+    sleep 3
+  done
+  return 1
+}
+
+if [ "$SMOKE_OBS" = "1" ]; then
+  say "Apply the smoke + observability overlays (chat stub, fixture mount, Prometheus, Tempo, Grafana)"
+  "${COMPOSE[@]}" up -d --wait smoke-chat ingestion otel-collector prometheus tempo grafana
+else
+  say "Apply the smoke overlay (chat stub + fixture mount)"
+  "${COMPOSE[@]}" up -d --wait smoke-chat ingestion
+fi
 
 say "Wait for pipeline and smoke dependencies"
 for _ in $(seq 1 60); do
@@ -162,6 +197,11 @@ if client.split(".")[:2] != server.split(".")[:2]:
     )
 PY
 pass "Qdrant client $CLIENT_VERSION matches server $SERVER_VERSION"
+
+say "Record ingestion embedding tokens before the run"
+INGEST_EMBED_BEFORE="$(curl -fsS "$INGESTION_URL/metrics" | metrics_sum opencg_tokens_total 'stage="ingest_embed"')" \
+  || fail "ingestion /metrics is not reachable at $INGESTION_URL/metrics"
+pass "ingestion opencg_tokens_total{stage=\"ingest_embed\"} = $INGEST_EMBED_BEFORE"
 
 say "Construct isolated local Git fixture"
 fixture_create "$RUN_ID" "$SMOKE_CHAT_MODE"
@@ -382,6 +422,46 @@ GRAPH_AUDIT_COUNT="$(psql_value "
 [ "${GRAPH_AUDIT_COUNT:-0}" -ge 1 ] || fail "no graph audit row found for $EDGE_ID"
 pass "candidate promoted and append-only graph audit row written"
 
+say "Call retrieve_for_context through the MCP server (HTTP transport)"
+MCP_CORRELATION_ID="$(mcp_retrieve "$MCP_URL/mcp" "amber-context protocol")" \
+  || fail "MCP retrieve_for_context call failed"
+[ -n "$MCP_CORRELATION_ID" ] || fail "MCP result had no correlation_id"
+pass "MCP retrieve_for_context returned correlation_id $MCP_CORRELATION_ID"
+
+# Required families per service (observability spec). These need no
+# Prometheus, Tempo or Grafana, and run even with OTLP export disabled.
+# Ingestion serves a multiprocess registry, which only lists families that
+# some process has written to, so it is checked for the families a
+# successful git run always writes.
+say "Verify /metrics on the pipeline, ingestion service and MCP server"
+PIPELINE_FAMILIES="opencg_requests_total opencg_stage_latency_seconds opencg_tokens_total opencg_cost_usd_total opencg_cost_unpriced_tokens_total opencg_provider_errors_total opencg_audit_writes_total"
+INGESTION_FAMILIES="opencg_ingestion_runs_total opencg_ingestion_documents_total opencg_ingestion_chunks_total opencg_ingestion_run_duration_seconds opencg_tokens_total"
+MCP_FAMILIES="opencg_requests_total opencg_stage_latency_seconds"
+PIPELINE_METRICS="$(curl -fsS "$PIPELINE_URL/metrics")" || fail "pipeline /metrics unreachable"
+INGESTION_METRICS="$(curl -fsS "$INGESTION_URL/metrics")" || fail "ingestion /metrics unreachable"
+MCP_METRICS="$(curl -fsS "$MCP_URL/metrics")" || fail "MCP server /metrics unreachable (it must not need the bearer token)"
+# shellcheck disable=SC2086 # the family lists are intentionally word-split
+MISSING="$(printf '%s' "$PIPELINE_METRICS" | metrics_missing_families $PIPELINE_FAMILIES)"
+[ -z "$MISSING" ] || fail "pipeline /metrics lacks: $(echo $MISSING)"
+# shellcheck disable=SC2086
+MISSING="$(printf '%s' "$INGESTION_METRICS" | metrics_missing_families $INGESTION_FAMILIES)"
+[ -z "$MISSING" ] || fail "ingestion /metrics lacks: $(echo $MISSING)"
+# shellcheck disable=SC2086
+MISSING="$(printf '%s' "$MCP_METRICS" | metrics_missing_families $MCP_FAMILIES)"
+[ -z "$MISSING" ] || fail "MCP server /metrics lacks: $(echo $MISSING)"
+MCP_STAGE_COUNT="$(printf '%s' "$MCP_METRICS" | metrics_sum opencg_stage_latency_seconds_count 'stage="mcp"')"
+[ "$(python3 -c 'import sys; print(float(sys.argv[1]) > 0)' "$MCP_STAGE_COUNT")" = True ] \
+  || fail "MCP server has no opencg_stage_latency_seconds{stage=\"mcp\"} observation after a tool call"
+SUCCEEDED_RUNS="$(printf '%s' "$INGESTION_METRICS" | metrics_sum opencg_ingestion_runs_total 'connector="git"' 'status="succeeded"')"
+[ "$(python3 -c 'import sys; print(float(sys.argv[1]) >= 1)' "$SUCCEEDED_RUNS")" = True ] \
+  || fail "ingestion /metrics shows no succeeded git run (CLI runs must reach the server's registry)"
+INGEST_EMBED_AFTER="$(printf '%s' "$INGESTION_METRICS" | metrics_sum opencg_tokens_total 'stage="ingest_embed"')"
+[ "$(python3 -c 'import sys; print(float(sys.argv[2]) > float(sys.argv[1]))' \
+  "$INGEST_EMBED_BEFORE" "$INGEST_EMBED_AFTER")" = True ] \
+  || fail "ingest_embed tokens did not increase ($INGEST_EMBED_BEFORE -> $INGEST_EMBED_AFTER)"
+pass "required metric families present on all three services"
+pass "ingest_embed tokens increased: $INGEST_EMBED_BEFORE -> $INGEST_EMBED_AFTER"
+
 OTEL_ENDPOINT="$("${COMPOSE[@]}" exec -T ingestion sh -c \
   'printf "%s" "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}"')"
 OTEL_ENDPOINT_NORMALIZED="$(printf '%s' "$OTEL_ENDPOINT" | tr '[:upper:]' '[:lower:]')"
@@ -409,8 +489,105 @@ case "$OTEL_ENDPOINT_NORMALIZED" in
     ;;
 esac
 
+if [ "$SMOKE_OBS" = "1" ]; then
+  say "Observability: Tempo ready"
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" sh -c "curl -fsS '$TEMPO_URL/ready' >/dev/null 2>&1" \
+    || fail "Tempo not ready at $TEMPO_URL/ready within ${SMOKE_OBS_WAIT_SECONDS}s"
+  pass "Tempo is ready"
+
+  say "Observability: Prometheus targets up"
+  PROM_JOBS="pipeline ingestion mcp-server otel-collector"
+  targets_up() {
+    # shellcheck disable=SC2086
+    TARGETS_DOWN="$(prom_targets_down "$PROMETHEUS_URL" $PROM_JOBS)"
+    [ -z "$TARGETS_DOWN" ]
+  }
+  TARGETS_DOWN=""
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" targets_up \
+    || fail "Prometheus targets not up within ${SMOKE_OBS_WAIT_SECONDS}s: $(echo $TARGETS_DOWN)"
+  pass "Prometheus targets up: $PROM_JOBS"
+
+  # A fresh Prometheus cannot see an increase in its first sample of a
+  # series. Earlier smoke stages already made retrievals, so wait until
+  # Prometheus holds a sample of the pipeline's retrieval token series, then
+  # make the traced MCP call (which spends embedding tokens) and compare.
+  TOKENS_QUERY='sum(opencg_tokens_total{job="pipeline",stage="hybrid_retrieval"})'
+  TOKENS_BEFORE=""
+  tokens_scraped() {
+    TOKENS_BEFORE="$(prom_scalar "$PROMETHEUS_URL" "$TOKENS_QUERY")"
+    [ -n "$TOKENS_BEFORE" ]
+  }
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" tokens_scraped \
+    || fail "Prometheus has no pipeline retrieval token sample within ${SMOKE_OBS_WAIT_SECONDS}s"
+
+  say "Observability: traced MCP call"
+  OBS_CORRELATION_ID="$(mcp_retrieve "$MCP_URL/mcp" "amber-context protocol")" \
+    || fail "MCP retrieve_for_context call failed"
+  pass "MCP retrieve_for_context correlation_id $OBS_CORRELATION_ID"
+
+  say "Observability: token and cost series in Prometheus"
+  tokens_increased() {
+    local value
+    value="$(prom_scalar "$PROMETHEUS_URL" "$TOKENS_QUERY")"
+    [ -n "$value" ] && python3 -c 'import sys; raise SystemExit(0 if float(sys.argv[1]) > float(sys.argv[2]) else 1)' "$value" "$TOKENS_BEFORE"
+  }
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" tokens_increased \
+    || fail "Prometheus shows no increase in opencg_tokens_total within ${SMOKE_OBS_WAIT_SECONDS}s"
+  COST_SERIES="$(prom_scalar "$PROMETHEUS_URL" 'count(opencg_cost_usd_total)')"
+  [ -n "$COST_SERIES" ] || fail "Prometheus has no opencg_cost_usd_total series"
+  pass "opencg_tokens_total increased past $TOKENS_BEFORE; $COST_SERIES opencg_cost_usd_total series present"
+
+  say "Observability: one connected trace in Tempo"
+  TRACE_SPANS="mcp.retrieve_for_context pipeline.retrieve pipeline.identity pipeline.hybrid_retrieval pipeline.assemble model.embed"
+  trace_found() {
+    # shellcheck disable=SC2086
+    TRACE_RESULT="$(tempo_trace_check "$TEMPO_URL" "$OBS_CORRELATION_ID" $TRACE_SPANS)"
+    case "$TRACE_RESULT" in ok\ *) return 0 ;; *) return 1 ;; esac
+  }
+  TRACE_RESULT=""
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" trace_found \
+    || fail "Tempo trace for correlation_id $OBS_CORRELATION_ID not complete: ${TRACE_RESULT:-no result}"
+  pass "Tempo trace ${TRACE_RESULT#ok } has $TRACE_SPANS, one trace_id, correlation_id on every span"
+
+  say "Observability: Grafana dashboards"
+  GRAFANA_PASSWORD="$(cfg OPENCG__GRAFANA__ADMIN_PASSWORD admin)"
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" sh -c "curl -fsS '$GRAFANA_URL/api/health' >/dev/null 2>&1" \
+    || fail "Grafana not healthy at $GRAFANA_URL within ${SMOKE_OBS_WAIT_SECONDS}s"
+  EXPECTED_UIDS="$(python3 -c '
+import json, pathlib, sys
+print(" ".join(sorted(json.loads(p.read_text())["uid"] for p in pathlib.Path(sys.argv[1]).glob("*.json"))))
+' "$ROOT/infra/grafana/dashboards")"
+  dashboards_listed() {
+    GRAFANA_UIDS="$(curl -fsS -u "admin:$GRAFANA_PASSWORD" \
+      "$GRAFANA_URL/api/search?folderUIDs=opencg&type=dash-db" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    items = json.load(sys.stdin)
+except Exception:
+    items = []
+print(" ".join(sorted(i["uid"] for i in items if i.get("folderTitle") == "openCG")))
+')"
+    [ "$GRAFANA_UIDS" = "$EXPECTED_UIDS" ]
+  }
+  GRAFANA_UIDS=""
+  wait_until "$SMOKE_OBS_WAIT_SECONDS" dashboards_listed \
+    || fail "Grafana openCG folder lists [$GRAFANA_UIDS], expected [$EXPECTED_UIDS]"
+  pass "Grafana lists every dashboard in the openCG folder: $EXPECTED_UIDS"
+
+  say "Observability: Grafana refuses anonymous access"
+  ANON_SEARCH="$(http_code "$GRAFANA_URL/api/search?folderUIDs=opencg")"
+  ANON_DASHBOARD="$(http_code "$GRAFANA_URL/api/dashboards/uid/opencg-requests")"
+  [ "$ANON_SEARCH" = 401 ] && [ "$ANON_DASHBOARD" = 401 ] \
+    || fail "Grafana answered unauthenticated requests with $ANON_SEARCH / $ANON_DASHBOARD (want 401)"
+  pass "Grafana returns 401 without credentials"
+fi
+
 TOTAL_SECONDS=$((SECONDS - START_SECONDS))
 [ "$TOTAL_SECONDS" -le "$SMOKE_TIMEOUT_SECONDS" ] || fail "smoke exceeded overall deadline"
-say "Smoke test PASSED"
+if [ "$SMOKE_OBS" = "1" ]; then
+  say "Observability smoke PASSED"
+else
+  say "Smoke test PASSED"
+fi
 printf 'run_id=%s mode=%s parents=%s chunks=%s duration=%ss\n' \
   "$RUN_ID" "$SMOKE_CHAT_MODE" "$PARENTS" "$CHUNKS" "$TOTAL_SECONDS"

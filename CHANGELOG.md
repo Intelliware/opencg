@@ -4,6 +4,21 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+- **Optional observability stack** (`add-observability-stack`): Prometheus `v3.15.1`, Tempo `3.1.1` and Grafana `13.2.5` in a new opt-in compose overlay, `infra/compose/docker-compose.observability.yml`. It is **not** part of the default stack: start it with `make up-obs` (roughly 400 to 700 MB more RAM), stop it with `make down`. Grafana (port 3030, login required, no anonymous access) ships six provisioned dashboards: requests, pipeline stages, tokens and cost, ingestion, audit, and providers. See `docs/OPERATIONS.md` § Observability.
+- One connected trace per MCP tool call: the MCP server now exports OpenTelemetry spans (`mcp.<tool>`) and propagates `traceparent` to the pipeline, every span carries `correlation_id`, and each model call has its own `model.embed` / `model.chat` span.
+- `/metrics` on the ingestion service (multiprocess, so CLI runs count) and the MCP server, alongside the pipeline. New series for cost, unpriced tokens, audit writes and ingestion runs, documents, chunks and duration; stage latency, provider errors and error outcomes are now recorded.
+- Estimated cost: an `observability.pricing` table in `opencg.yaml` (with `source` and `as_of` on every row), `opencg_cost_usd_total`, `by_provider` / `estimated_cost_usd` / `cost_complete` in the usage envelope, cost columns on the retrieval audit row (`infra/postgres/init/060_audit_cost.sql`; apply it by hand on an existing volume), and cost beside every token count in the admin UI. A model with no price shows as "unpriced", never as free.
+- `make smoke` now also checks every service's `/metrics`; `make smoke-obs` checks Prometheus targets, token and cost series, the Tempo trace and the Grafana dashboards. `make check-dashboards` lints the dashboard JSON in `make ci-static`.
+- CI: a new `observability` job runs `make smoke-obs` on every pull request into `main`, on pushes to `main` and nightly. It is listed as a required check in `.github/rulesets/main-branch-protection.json`.
+
+### Changed
+
+- **Provider label for Ollama Cloud chat is now `ollama-cloud`** (was `ollama`) on tokens, cost, provider errors and spans; `providers.chat.provider` defaults to `ollama-cloud`, and an older `provider: ollama` block with an `ollama.com` base URL is relabelled at start-up. Queries or dashboards that filter chat on `provider="ollama"` need updating.
+- Embedding tokens spent during ingestion are now counted (`opencg_tokens_total{stage="ingest_embed"}`).
+- `make down` and `make down-v` also remove the observability overlay's containers (and, for `down-v`, its volumes) and orphaned overlay services.
+
 ## [0.1.0] - 2026-11-10
 
 The first public release.

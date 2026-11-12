@@ -5,6 +5,7 @@ import type {
   TraverseResponse,
 } from "@opencg/shared";
 import { request as undiciRequest } from "undici";
+import { traceHeaders } from "./telemetry.js";
 
 export class PipelineRequestError extends Error {
   constructor(
@@ -15,6 +16,9 @@ export class PipelineRequestError extends Error {
   }
 }
 
+// Every outgoing request carries the W3C `traceparent` / `tracestate` of the
+// active span (the `mcp.<tool>` span during a tool call), so the pipeline
+// continues the same trace.
 export class PipelineClient {
   constructor(private readonly baseUrl: string) {}
 
@@ -22,7 +26,11 @@ export class PipelineClient {
     const url = `${this.baseUrl.replace(/\/$/, "")}/retrieve`;
     const res = await undiciRequest(url, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-correlation-id": req.correlation_id },
+      headers: {
+        ...traceHeaders(),
+        "content-type": "application/json",
+        "x-correlation-id": req.correlation_id,
+      },
       body: JSON.stringify(req),
     });
     if (res.statusCode >= 400) {
@@ -32,7 +40,7 @@ export class PipelineClient {
     return (await res.body.json()) as RetrievalResponse;
   }
 
-  async traverse(req: TraverseRequest): Promise<TraverseResponse> {
+  async traverse(req: TraverseRequest, correlationId?: string): Promise<TraverseResponse> {
     const url = new URL(`${this.baseUrl.replace(/\/$/, "")}/graph/traverse`);
     url.searchParams.set("concept_id", req.concept_id);
     if (req.types?.length) {
@@ -47,7 +55,9 @@ export class PipelineClient {
     if (req.include_candidates !== undefined) {
       url.searchParams.set("include_candidates", String(req.include_candidates));
     }
-    const res = await undiciRequest(url);
+    const headers: Record<string, string> = traceHeaders();
+    if (correlationId) headers["x-correlation-id"] = correlationId;
+    const res = await undiciRequest(url, { headers });
     if (res.statusCode >= 400) {
       const body = await res.body.text();
       throw new PipelineRequestError(res.statusCode, body);
@@ -57,7 +67,9 @@ export class PipelineClient {
 
   async health(): Promise<boolean> {
     try {
-      const res = await undiciRequest(`${this.baseUrl.replace(/\/$/, "")}/healthz`);
+      const res = await undiciRequest(`${this.baseUrl.replace(/\/$/, "")}/healthz`, {
+        headers: traceHeaders(),
+      });
       return res.statusCode === 200;
     } catch {
       return false;

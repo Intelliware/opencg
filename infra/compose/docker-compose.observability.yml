@@ -1,0 +1,102 @@
+# OPTIONAL observability overlay: Prometheus, Tempo and Grafana.
+#
+# Not part of the default stack. `make up-d`, `make smoke` and the CI `stack`
+# job never start these services. Turn them on with `make up-obs` (or
+# `make smoke-obs`), which applies this file on top of the dev stack:
+#
+#   docker compose -f infra/compose/docker-compose.yml \
+#                  -f infra/compose/docker-compose.observability.yml --profile dev ...
+#
+# Turn them off with `make down` (it passes --remove-orphans, so the overlay's
+# containers go too); `make down-v` also deletes their volumes. The overlay adds
+# roughly 400 to 700 MB of RAM. See docs/OPERATIONS.md § Observability.
+#
+# Without this overlay the services still emit spans (the collector prints them
+# to its log) and still serve /metrics; nothing stores or charts them.
+
+services:
+  # Merge a second collector config that also exports traces to Tempo and
+  # serves the collector's own metrics on :8888 (compose-internal only).
+  otel-collector:
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+      - --config=/etc/otelcol-contrib/tempo.yaml
+    volumes:
+      - ../otel/otel-collector.tempo.yaml:/etc/otelcol-contrib/tempo.yaml:ro
+    healthcheck:
+      test:
+        - CMD
+        - /otelcol-contrib
+        - validate
+        - --config=/etc/otelcol-contrib/config.yaml
+        - --config=/etc/otelcol-contrib/tempo.yaml
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${OPENCG__PROMETHEUS__RETENTION:-7d}
+      - --storage.tsdb.retention.size=2GB
+    volumes:
+      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__PROMETHEUS__HOST_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    profiles: [dev]
+
+  # Tempo 3 monolithic mode. The image is distroless (no shell, wget or curl),
+  # so it has no in-container healthcheck; `make smoke-obs` polls /ready from
+  # the host and the collector retries its exports until Tempo is up.
+  tempo:
+    image: grafana/tempo:3.1.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ../tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      # Query API only; the OTLP receiver (4317) stays compose-internal.
+      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__TEMPO__HOST_PORT:-3200}:3200"
+    profiles: [dev]
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${OPENCG__GRAFANA__ADMIN_PASSWORD:-admin}
+      # Owner decision: no anonymous viewing, even on loopback.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/opencg/opencg-requests.json
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/etc/grafana/dashboards/opencg:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus: { condition: service_healthy }
+      tempo: { condition: service_started }
+    ports:
+      # 3030, not Grafana's usual 3000 (the admin UI) or 3001 (the e2e
+      # overlay's gated admin UI).
+      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__GRAFANA__HOST_PORT:-3030}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    profiles: [dev]
+
+volumes:
+  prometheus-data:
+  tempo-data:
+  grafana-data:

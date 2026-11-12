@@ -12,13 +12,74 @@ import {
   isInitializeRequest,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { type Outcome, recordToolCall } from "./metrics.js";
+import { PipelineRequestError } from "./pipeline-client.js";
+import { withSpan } from "./telemetry.js";
 import {
   ConceptNotFoundError,
   NotImplementedInMvpError,
   TOOL_DEFINITIONS,
   type ToolCallContext,
+  ToolValidationError,
+  UnknownToolError,
   callTool,
+  toolLabel,
 } from "./tools.js";
+
+// `rejected` = the caller's request was refused (bad arguments, unknown or
+// unimplemented tool, a 4xx from the pipeline such as validation or a policy
+// denial). `error` = anything else (pipeline 5xx, network failure, bug).
+export function classifyError(err: unknown): Outcome {
+  if (
+    err instanceof ToolValidationError ||
+    err instanceof UnknownToolError ||
+    err instanceof NotImplementedInMvpError ||
+    err instanceof ConceptNotFoundError
+  ) {
+    return "rejected";
+  }
+  if (err instanceof PipelineRequestError && err.statusCode >= 400 && err.statusCode < 500) {
+    return "rejected";
+  }
+  return "error";
+}
+
+/**
+ * Run one tool call inside an `mcp.<tool>` span and record
+ * `opencg_requests_total{tool,outcome}` + `opencg_stage_latency_seconds{stage="mcp"}`.
+ * The correlation ID minted here is the one sent to the pipeline (request body
+ * and `x-correlation-id`), so MCP and pipeline spans share it.
+ */
+export async function instrumentedCallTool(
+  name: string,
+  args: unknown,
+  ctx: ToolCallContext,
+): Promise<Awaited<ReturnType<typeof callTool>>> {
+  const tool = toolLabel(name);
+  const correlationId = ctx.correlationId || randomUUID();
+  const started = process.hrtime.bigint();
+  let outcome: Outcome = "ok";
+  try {
+    return await withSpan(
+      `mcp.${tool}`,
+      { correlation_id: correlationId, tool, tenant: ctx.config.tenant },
+      async (span) => {
+        try {
+          return await callTool(name, args, { ...ctx, correlationId });
+        } catch (err) {
+          outcome = classifyError(err);
+          span.setAttribute("outcome", outcome);
+          throw err;
+        }
+      },
+    );
+  } catch (err) {
+    if (outcome === "ok") outcome = classifyError(err);
+    throw err;
+  } finally {
+    recordToolCall(tool, outcome, Number(process.hrtime.bigint() - started) / 1e9);
+  }
+}
 
 export function buildMcpServer(ctx: ToolCallContext): Server {
   const server = new Server(
@@ -36,7 +97,7 @@ export function buildMcpServer(ctx: ToolCallContext): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     try {
-      const result = await callTool(req.params.name, req.params.arguments ?? {}, ctx);
+      const result = await instrumentedCallTool(req.params.name, req.params.arguments ?? {}, ctx);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       const code =

@@ -104,6 +104,20 @@ export class ConceptNotFoundError extends Error {
   code = "concept_not_found" as const;
 }
 
+/** Bad tool arguments: counted as `outcome="rejected"`. */
+export class ToolValidationError extends Error {
+  code = "invalid_arguments" as const;
+}
+
+export class UnknownToolError extends Error {
+  code = "unknown_tool" as const;
+}
+
+/** `opencg/retrieve_for_context` → `retrieve_for_context`; anything unadvertised → `unknown`. */
+export function toolLabel(name: string): string {
+  return TOOL_DEFINITIONS.some((t) => t.name === name) ? name.replace(/^opencg\//, "") : "unknown";
+}
+
 export interface RetrieveContextArgs {
   query: string;
   top_k?: number;
@@ -132,7 +146,7 @@ export async function callTool(
     case "opencg/submit_feedback":
       throw new NotImplementedInMvpError(`${name} ships in a follow-up change`);
     default:
-      throw new Error(`Unknown tool: ${name}`);
+      throw new UnknownToolError(`Unknown tool: ${name}`);
   }
 }
 
@@ -141,18 +155,21 @@ async function traverseGraph(
   ctx: ToolCallContext,
 ): Promise<TraverseResponse> {
   if (!args || typeof args.concept_id !== "string" || !args.concept_id.trim()) {
-    throw new Error("concept_id is required and must be a non-empty string");
+    throw new ToolValidationError("concept_id is required and must be a non-empty string");
   }
   try {
-    return await ctx.pipeline.traverse({
-      concept_id: args.concept_id,
-      ...(args.types !== undefined ? { types: args.types } : {}),
-      ...(args.depth !== undefined ? { depth: args.depth } : {}),
-      ...(args.limit !== undefined ? { limit: args.limit } : {}),
-      ...(args.include_candidates !== undefined
-        ? { include_candidates: args.include_candidates }
-        : {}),
-    });
+    return await ctx.pipeline.traverse(
+      {
+        concept_id: args.concept_id,
+        ...(args.types !== undefined ? { types: args.types } : {}),
+        ...(args.depth !== undefined ? { depth: args.depth } : {}),
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        ...(args.include_candidates !== undefined
+          ? { include_candidates: args.include_candidates }
+          : {}),
+      },
+      ctx.correlationId,
+    );
   } catch (error) {
     if (error instanceof PipelineRequestError && error.statusCode === 404) {
       throw new ConceptNotFoundError(`concept not found: ${args.concept_id}`);
@@ -166,7 +183,7 @@ async function retrieveForContext(
   ctx: ToolCallContext,
 ): Promise<RetrievalResponse> {
   if (!args || typeof args.query !== "string" || !args.query.trim()) {
-    throw new Error("query is required and must be a non-empty string");
+    throw new ToolValidationError("query is required and must be a non-empty string");
   }
   const correlation_id = ctx.correlationId || randomUUID();
   const req: RetrievalRequest = {

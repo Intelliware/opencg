@@ -28,6 +28,7 @@ from opencg_shared.metrics import (
     STAGE_LATENCY,
     record_stage_tokens,
 )
+from opencg_shared.otel import current_correlation_id
 from opentelemetry import trace
 
 from opencg_pipeline.providers import OllamaChat
@@ -202,6 +203,9 @@ async def extract_for_chunk(
     system, user = build_prompt(chunk_text, vocabulary)
     started = time.perf_counter()
     with tracer.start_as_current_span("pipeline.graph_extract_text") as span:
+        correlation_id = current_correlation_id()
+        if correlation_id:
+            span.set_attribute("correlation_id", correlation_id)
         span.set_attribute("stage", _STAGE)
         span.set_attribute("tenant", tenant)
         if chunk_entity_id:
@@ -228,7 +232,7 @@ async def extract_for_chunk(
         latency_seconds = time.perf_counter() - started
         latency_ms = latency_seconds * 1000
         STAGE_LATENCY.labels(stage=_STAGE).observe(latency_seconds)
-        record_stage_tokens(
+        cost = record_stage_tokens(
             stage=_STAGE,
             tenant=tenant,
             model=chat_result.model,
@@ -241,6 +245,8 @@ async def extract_for_chunk(
         span.set_attribute("tokens_in", chat_result.tokens_in)
         span.set_attribute("tokens_out", chat_result.tokens_out)
         span.set_attribute("latency_ms", latency_ms)
+        span.set_attribute("cost_usd", cost if cost is not None else -1.0)
+        span.set_attribute("cost_priced", cost is not None)
 
         parsed = parse_response(chat_result.content)
         if parsed is None:
