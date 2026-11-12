@@ -51,7 +51,7 @@ providers:
     # `ollama-cloud`; it uses the same Ollama adapter as local `ollama`.
     provider: ollama-cloud
     base_url: https://ollama.com
-    model: gemma3:4b
+    model: gemma4:31b
     api_key: null
   extraction:
     enabled: true
@@ -84,8 +84,9 @@ observability:
       as_of: 2026-11-12
     # Ollama Cloud publishes per-token rates (USD per million; divided by 1,000
     # here). Standard (peak) input and output rates; cached-input and off-peak
-    # discounts are not modelled. gemma3:4b, the default chat model, is not on
-    # the price list as of 2026-11-12, so it shows as unpriced.
+    # discounts are not modelled. The price list names Gemma 4 `gemma4`; Ollama
+    # Cloud serves it as `gemma4:31b` (the default chat model), so both names
+    # are priced at the same published rate.
     - provider: ollama-cloud
       model: "beam"
       input_usd_per_1k: 0.000125
@@ -106,6 +107,12 @@ observability:
       as_of: 2026-11-12
     - provider: ollama-cloud
       model: "gemma4"
+      input_usd_per_1k: 0.00014
+      output_usd_per_1k: 0.0004
+      source: https://ollama.com/pricing
+      as_of: 2026-11-12
+    - provider: ollama-cloud
+      model: "gemma4:31b"
       input_usd_per_1k: 0.00014
       output_usd_per_1k: 0.0004
       source: https://ollama.com/pricing

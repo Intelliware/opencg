@@ -10,7 +10,7 @@ The `opencg.yaml` config SHALL gain a `providers` section with sub-blocks `embed
 
 - **WHEN** the project is cloned and only `.env.example` is copied to `.env`
 - **THEN** `providers.embeddings` resolves to `provider=ollama, base_url=http://ollama:11434, model=nomic-embed-text, api_key=null`
-- **AND** `providers.chat` resolves to `provider=ollama-cloud, base_url=https://ollama.com, model=gemma3:4b, api_key=<env-or-null>`
+- **AND** `providers.chat` resolves to `provider=ollama-cloud, base_url=https://ollama.com, model=gemma4:31b, api_key=<env-or-null>`
 
 #### Scenario: Backwards compatibility with `ollama` block
 

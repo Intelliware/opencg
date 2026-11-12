@@ -125,14 +125,14 @@ The system SHALL read a price table from `observability.pricing` in `opencg.yaml
 
 #### Scenario: A published Ollama Cloud model is priced by default
 
-- **WHEN** the chat endpoint is set to an Ollama Cloud model on the published price list (for example `gemma4`) and the text extractor calls it with the default price table
-- **THEN** `opencg_cost_usd_total{provider="ollama-cloud",model="gemma4"}` increases by a value greater than zero
+- **WHEN** the chat endpoint is set to an Ollama Cloud model on the published price list (for example the default `gemma4:31b`) and the text extractor calls it with the default price table
+- **THEN** `opencg_cost_usd_total{provider="ollama-cloud",model="gemma4:31b"}` increases by a value greater than zero
 - **AND** `opencg_cost_unpriced_tokens_total` does not increase for that pair
 
 #### Scenario: A model missing from the price list stays visible
 
-- **WHEN** the extractor calls `gemma3:4b`, which is not on Ollama's price list as of 2026-11-12
-- **THEN** its tokens are counted in `opencg_cost_unpriced_tokens_total{provider="ollama-cloud",model="gemma3:4b"}`
+- **WHEN** the chat endpoint is set to an Ollama Cloud model that has no price entry
+- **THEN** its tokens are counted in `opencg_cost_unpriced_tokens_total{provider="ollama-cloud",model=<that model>}`
 
 #### Scenario: Entry without provenance is rejected
 

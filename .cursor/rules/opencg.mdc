@@ -59,7 +59,7 @@ Check the live state any time with `openspec list`.
 | Catalog + audit + graph | PostgreSQL 16 + Apache AGE (graph extension) |
 | Cache | Valkey |
 | Embeddings | Ollama (compose-internal `ollama` service, default `nomic-embed-text`) |
-| Chat / generation | Ollama Cloud (`gemma3:4b` default, used by knowledge-graph text extraction) |
+| Chat / generation | Ollama Cloud (`gemma4:31b` default, used by knowledge-graph text extraction) |
 | Admin UI | Next.js 15 App Router |
 | Storybook | **`@storybook/react-vite`** (NOT `@storybook/nextjs`) |
 | Tests | pytest, vitest, Playwright (admin UI e2e) |

@@ -1,7 +1,7 @@
 """LLM-based extractor for text chunks.
 
 Called by the ingestion pipeline after a non-code chunk lands in the catalog
-+ vector index. Asks a chat model (Ollama Cloud `gemma3:4b` by default) for
++ vector index. Asks a chat model (Ollama Cloud `gemma4:31b` by default) for
 structured `{concepts, relations}` JSON, parses it, drops anything below
 `min_confidence`, and returns a normalised `ExtractionResult` ready to hand
 to the graph writer.

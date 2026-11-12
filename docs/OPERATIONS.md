@@ -70,7 +70,7 @@ A single `opencg.yaml` file is the source of truth. Environment variables overri
 | `OPENCG__OLLAMA__BASE_URL` | `http://ollama:11434` | Compose-internal Ollama by default. |
 | `OPENCG__OLLAMA__EMBEDDING_MODEL` | `nomic-embed-text` | See "Swapping the embedding model" below. |
 | `OPENCG__PROVIDERS__CHAT__BASE_URL` | `https://ollama.com` | Chat endpoint used by text graph extraction. |
-| `OPENCG__PROVIDERS__CHAT__MODEL` | `gemma3:4b` | Independently configurable extraction model. |
+| `OPENCG__PROVIDERS__CHAT__MODEL` | `gemma4:31b` | Independently configurable extraction model. |
 | `OPENCG__PROVIDERS__CHAT__API_KEY` | empty | Secret bearer token for the chat endpoint. |
 | `OPENCG__RETRIEVAL__DEFAULT_TOP_K` | `20` | Per-leg retrieval limit. |
 | `OPENCG__RETRIEVAL__DEFAULT_TOKEN_BUDGET` | `4000` | Assemble-stage hard cap. |
@@ -356,7 +356,7 @@ Labels never carry query text, principals, entity IDs or correlation IDs. The `p
 Cost is an estimate from the `observability.pricing` table in `opencg.yaml`: USD per 1,000 tokens, one row per `(provider, model)`, each with a required `source` and `as_of`. A missing `source` or `as_of` stops the service from starting.
 
 - Local Ollama (`ollama` / `nomic-embed-text`) is priced at zero.
-- Ollama Cloud rows use the per-token rates published at <https://ollama.com/pricing>. The default chat model `gemma3:4b` had no published rate on 2026-11-12, so it is **unpriced** by default.
+- Ollama Cloud rows use the per-token rates published at <https://ollama.com/pricing>. The default chat model `gemma4:31b` is priced at the published `gemma4` rate ($0.14 input / $0.40 output per million tokens on 2026-11-12). A model missing from the list shows as **unpriced**, never as $0.
 - A pair with no row is never counted as free: its tokens go to `opencg_cost_unpriced_tokens_total`, its `cost_usd` is `null`, `cost_complete` is `false`, the admin UI shows "unpriced", and each process logs one warning per pair.
 
 To refresh a rate: check the provider's price page, update `input_usd_per_1k` / `output_usd_per_1k` (the page lists USD per million tokens; divide by 1,000), set `source` and `as_of` to today, and restart the pipeline and ingestion (`make up-d`, or `make up-obs` with the overlay). Prices apply from the restart on; counters and audit rows already written keep the old figures.

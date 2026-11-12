@@ -135,14 +135,14 @@ observability:
       source: "compose-local model; no charge"
       as_of: 2026-11-12
     - provider: ollama-cloud
-      model: gemma3:4b
+      model: gemma4:31b
       input_usd_per_1k: <published rate>
       output_usd_per_1k: <published rate>
       source: https://ollama.com/pricing
       as_of: <date checked>
 ```
 
-- **Everything that has a price is priced.** Ollama Cloud moved to per-token billing on 2026-08-31 and publishes rates per model at ollama.com/pricing. The default table carries every model on that list (standard input and output rates; cached-input and off-peak discounts are not modelled), checked on 2026-11-12. The default chat model `gemma3:4b` is **not** on the list, so it shows as unpriced, never as free; moving the default to a priced model such as `gemma4` is a separate owner decision.
+- **Everything that has a price is priced.** Ollama Cloud moved to per-token billing on 2026-08-31 and publishes rates per model at ollama.com/pricing. The default table carries every model on that list (standard input and output rates; cached-input and off-peak discounts are not modelled), checked on 2026-11-12. The previous default chat model `gemma3:4b` is **not** on the list, so the owner moved the default to `gemma4:31b` (listed as `gemma4`, $0.14 / $0.40 per million input / output tokens) on 2026-11-12. A model missing from the list still shows as unpriced, never as free.
 - `source` and `as_of` are required on every row, so a reader can tell where a number came from and how old it is. The OPERATIONS runbook explains how to refresh them.
 - A small `pricing.py` in `opencg_shared` loads the table into a dict keyed by `(provider, model)` and exposes `cost_usd(provider, model, tokens_in, tokens_out)`, which returns `None` for an unpriced pair. `record_stage_tokens()` calls it, so every existing call site gains cost without changes, and returns the cost so the usage envelope and audit row use the same number.
 - **Unpriced is not zero.** Metrics count unpriced tokens separately. The envelope, the audit row and the admin UI carry `null` and display "unpriced". `estimated_cost_usd` sums the priced entries only and sets `cost_complete: false` when any entry is unpriced.
