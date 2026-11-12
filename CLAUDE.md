@@ -51,7 +51,8 @@ Check the live state any time with `openspec list`.
 | Pipeline, ingestion, workers | Python 3.12 (FastAPI, asyncpg, httpx) |
 | Vector store | Qdrant |
 | Catalog + audit + graph | PostgreSQL 16 + Apache AGE (graph extension) |
-| Cache | Valkey |
+| Cache · admin UI sessions | Valkey |
+| Identity · policy | Any OIDC issuer (`OPENCG__AUTH__MODE=oidc`; bundled Keycloak under the `idp` profile); OPA for entitlement + action decisions (`infra/opa/`) |
 | Embeddings | Ollama (compose-internal `ollama` service, default `nomic-embed-text`) |
 | Chat / generation | Ollama Cloud (`gemma4:31b` default, used by knowledge-graph text extraction) |
 | Admin UI | Next.js 16 App Router (React 19) |
@@ -85,12 +86,15 @@ services/pipeline/                  FastAPI retrieve + admin + (soon) graph rout
 services/ingestion/                 FastAPI + Click CLI
 services/admin-ui/                  Next.js 16 admin UI + Storybook
 infra/postgres/                     Dockerfile + init SQL (010_, 020_, ...)
+infra/opa/                          OPA policies (Rego), data and policy tests
+infra/keycloak/                     bundled Keycloak realm import + entrypoint
 infra/ollama/                       entrypoint + healthcheck scripts
 infra/otel/                         collector config (+ otel-collector.tempo.yaml for the overlay)
 infra/prometheus/                   prometheus.yml (observability overlay only)
 infra/tempo/                        tempo.yaml, Tempo 3 monolithic (observability overlay only)
 infra/grafana/                      provisioning/ + dashboards/*.json (observability overlay only)
 infra/compose/docker-compose.yml    the v0 dev profile
+infra/compose/docker-compose.oidc.yml  test overlay: every service in oidc mode against the bundled Keycloak (OPENCG_TEST_AUTH_MODE=oidc, the default)
 infra/compose/docker-compose.observability.yml  opt-in Prometheus/Tempo/Grafana overlay (make up-obs)
 tests/smoke/run.sh                  end-to-end smoke (helpers in tests/smoke/lib.sh); SMOKE_OBS=1 = make smoke-obs
 scripts/                            check-agent-guides.sh, check-dashboards.py (+ tests/)
@@ -127,6 +131,8 @@ Admin UI pages: `/` (overview), `/graph`, `/vectors`, `/entities`, `/queries`, `
 - **Storybook 8 + Next**: `@storybook/nextjs` chokes on a Next webpack hook (found on 15.5). We use `@storybook/react-vite` with tiny `next/link` + `next/navigation` mocks in `.storybook/mocks/`.
 - **Bumping Next.js**: `next build` rewrites `services/admin-ui/tsconfig.json` and `next-env.d.ts`; commit them with the bump. Run the full `make hydration-stress` on every Next or React bump (issue #2 only showed under concurrent load).
 - **Compose shell-var escaping**: use `$$VAR` inside healthcheck CMD-SHELL strings so the container shell — not docker compose — evaluates the substitution.
+- **Auth host ports**: OPA debugging port 8281 (8181 is the MCP server), bundled Keycloak 8380 (8080 collides, see below). Both via `OPENCG__OPA__HOST_PORT` / `OPENCG__KEYCLOAK__HOST_PORT`.
+- **Auth defaults fail safe**: an unset `OPENCG__ENVIRONMENT` means `production` (API keys refused); `none` auth mode refuses non-loopback `OPENCG__BIND_ADDRESS`. Every new pipeline route needs an entry in `services/pipeline/src/opencg_pipeline/security.py` `ROUTE_ACTIONS` (a unit test fails otherwise). After editing `infra/opa/`, run `make opa-revision && make opa-test`.
 - **Port 8080 collision** on the user's machine (something called `nominatim` runs there). The MCP server uses host port 8181, configurable via `OPENCG__MCP__HOST_PORT`.
 - **asyncpg + JSONB columns**: serialise dicts with `json.dumps(...)` before binding. Otherwise: `invalid input for query argument: expected str, got dict`.
 - **MEMORY.md and per-user memory** live in `~/.claude/projects/...`, NOT in the repo. A new session won't see them. That's why this file exists.

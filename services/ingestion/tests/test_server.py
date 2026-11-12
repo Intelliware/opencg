@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from opencg_ingestion import server as srv
 from opencg_ingestion.runs import RunStore
 from opencg_shared import openCGConfig
+from opencg_shared.testing import install
 
 
 @pytest.fixture
@@ -39,6 +40,7 @@ def make_client(monkeypatch):
             {"ingestion": {"git": {"allowed_hosts": ["example.com"]}}}
         )
         app.state.runs = RunStore(cap=10)
+        install(app)
         return TestClient(app)
 
     return _build
@@ -133,3 +135,65 @@ def test_metrics_serves_multiprocess_registry(make_client, monkeypatch, tmp_path
     assert resp.status_code == 200
     assert 'opencg_ingestion_runs_total{connector="git",status="succeeded"} 1.0' in resp.text
     assert 'opencg_ingestion_documents_total{connector="git"} 4.0' in resp.text
+
+
+def test_invalid_classification_is_400_and_queues_nothing(make_client):
+    client = make_client()
+    resp = client.post(
+        "/run/git",
+        json={"repo_url": "https://example.com/repo.git", "classification": "Top Secret"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "invalid_classification"
+    assert client.get("/runs/recent").json() == []
+
+
+def test_classified_run_records_classification_and_requester(make_client):
+    seen = {}
+
+    async def ingest(repo_url, cfg, **kwargs):
+        seen.update(kwargs)
+        return (1, 2)
+
+    client = make_client(ingest=None)
+    from opencg_ingestion import server as srv
+
+    srv_ingest = srv.ingest_run
+    try:
+        srv.ingest_run = ingest
+        resp = client.post(
+            "/run/git",
+            json={
+                "repo_url": "https://example.com/repo.git",
+                "classification": "confidential:legal",
+            },
+        )
+    finally:
+        srv.ingest_run = srv_ingest
+    assert resp.status_code == 200
+    run = client.get("/runs/recent").json()[0]
+    assert run["classification"] == "confidential:legal"
+    assert run["requested_by"] == "local-dev"  # the stub principal in none mode
+    assert seen["classification"] == "confidential:legal"
+
+
+def test_reader_cannot_start_a_run_directly(make_client):
+    from opencg_shared.testing import FakeOpa
+
+    client = make_client()
+    client.app.state.opa = FakeOpa(deny_actions={"ingestion.run"})
+    resp = client.post("/run/git", json={"repo_url": "https://example.com/repo.git"})
+    assert resp.status_code == 403
+    assert client.get("/runs/recent").json() == []
+    assert client.app.state.audit_pool.actions() == [("local-dev", "ingestion.run", "deny")]
+
+
+def test_oidc_mode_requires_a_token(make_client):
+    from opencg_shared.testing import authenticator
+
+    client = make_client()
+    client.app.state.authenticator = authenticator(
+        OPENCG__AUTH__MODE="oidc", OPENCG__AUTH__OIDC__ISSUER="http://idp/realms/opencg"
+    )
+    assert client.get("/connectors").status_code == 401
+    assert client.get("/healthz").status_code == 200

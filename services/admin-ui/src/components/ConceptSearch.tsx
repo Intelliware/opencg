@@ -3,6 +3,7 @@
 import type { ConceptListItem } from "@opencg/shared";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
 export function ConceptSearch({ onSelect }: { onSelect: (conceptId: string) => void }) {
   const [query, setQuery] = useState("");
@@ -24,7 +25,10 @@ export function ConceptSearch({ onSelect }: { onSelect: (conceptId: string) => v
     setLoading(true);
     const timer = setTimeout(() => {
       fetch(`/api/proxy/graph/concepts?search=${encodeURIComponent(q)}&limit=10`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : { items: [] }))
+        .then(async (r) => {
+          if (r.status === 401) await checkProxyAuth(r, "search concepts");
+          return r.ok ? r.json() : { items: [] };
+        })
         .then((data) => {
           if (!active) return;
           setResults(data.items ?? []);

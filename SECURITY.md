@@ -26,14 +26,14 @@ These are known, deliberate stopgaps. Reports that only restate them are welcome
 
 | Area | Current behaviour | Planned replacement |
 |---|---|---|
-| **Identity** | Stubbed. Every request runs as the principal, roles and tenant set in the environment (`OPENCG__IDENTITY__*`, default `local-dev` / `admin,reader` / `default`). There is no per-user identity and no authorisation beyond a role-to-classification allow-list. | Real identity and OPA-based authorisation (`add-foundation`). |
-| **Pipeline and ingestion HTTP APIs** (ports 8000, 8100) | No authentication. Anyone who can reach them can retrieve content, tombstone entities, edit the graph and start ingestion runs. | The same identity work. Keep them on loopback or a private network. |
-| **MCP HTTP endpoint** (`/mcp`, port 8181) | Open when `OPENCG__MCP__HTTP_TOKEN` is unset; otherwise it requires that single static bearer token. | Real identity provider. |
-| **MCP OAuth** (`services/mcp-server/src/oauth.ts`, `REPLACE-BEFORE-PROD`) | Minimal OAuth server for claude.ai connectors: one shared password, self-issued tokens held in memory and lost on restart. | Real identity provider. |
-| **Admin UI access gate** (`services/admin-ui/src/lib/session.ts`, `REPLACE-BEFORE-PROD`) | Optional. With `OPENCG__ADMIN_UI__PASSWORD` unset, the UI is open and shows an "Unauthenticated mode" banner. When set, a shared password issues a 12-hour HMAC-signed session cookie. There are no per-user accounts. | Real identity provider. |
+| **`none` auth mode (the default)** | Every request runs as the stub identity set in the environment (`OPENCG__IDENTITY__*`, default `local-dev` / `admin,reader` / `default`), and the admin UI shows an "Unauthenticated mode" banner. Services refuse to start in this mode unless `OPENCG__BIND_ADDRESS` is a loopback address. OPA policy still applies. | Use `OPENCG__AUTH__MODE=oidc` with your identity provider for anything shared (see `docs/OPERATIONS.md`). |
+| **Bundled Keycloak** | For local, smoke, e2e and CI use. `.env.example` ships public `dev-only-…` passwords and client secrets, and dev users are imported in `dev`/`test`. | Change every value before Keycloak is reachable from a network, or use your own IdP. |
+| **API keys** | Named static keys (`ock_…`) and the legacy `OPENCG__MCP__HTTP_TOKEN` are accepted **only** when `OPENCG__ENVIRONMENT=dev`; outside `dev` the services refuse to start if any are configured. | Client-credentials tokens from your IdP. |
+| **Entitlement scope** | OPA decides retrieval candidates and every API action. Graph concepts and edges have no per-item entitlement (graph reads need only `graph.read`). Source-system permissions are not inherited. | Follow-up changes. |
+| **Multi-tenancy** | Single tenant per deployment; `tenant` comes from configuration or one token claim. | Deferred (`add-foundation`). |
 | **Ingestion URL guard** | "Run now" accepts `https`, `ssh`, `git` and `user@host:path` URLs that resolve to public addresses, plus local paths under `OPENCG__INGESTION__GIT__LOCAL_ROOTS`. DNS is checked when the URL is submitted, so DNS rebinding between the check and the clone is not covered. The ingestion CLI is operator-driven and unrestricted. | Network-level egress policy. |
 | **Transport security** | Services speak plain HTTP inside the compose network and on loopback. | Terminate TLS at a reverse proxy before exposing anything. |
-| **Default credentials** | `.env.example` ships the Postgres password `opencg`. | Change it in `.env` before any shared use. |
+| **Default credentials** | `.env.example` ships the Postgres password `opencg` and the dev-only Keycloak values. | Change them in `.env` before any shared use. |
 
 ## Dependency advisories
 

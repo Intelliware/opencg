@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserBadge } from "@/components/UserBadge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavContent({ pathname, signOut }: { pathname: string; signOut: boolean }) {
+function NavContent({ pathname, user }: { pathname: string; user?: SidebarUser | null }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-4 py-5">
@@ -58,11 +59,15 @@ function NavContent({ pathname, signOut }: { pathname: string; signOut: boolean 
           </Link>
         ))}
       </nav>
-      <div className="flex items-center justify-between border-t px-4 py-3">
-        <span className="text-xs text-muted-foreground">Admin</span>
-        <div className="flex items-center gap-1">
-          {signOut ? (
-            <form method="post" action="/api/auth/logout">
+      <div className="flex items-center justify-between gap-2 border-t px-4 py-3">
+        {user ? (
+          <UserBadge principal={user.principal} roles={user.roles} />
+        ) : (
+          <span className="text-xs text-muted-foreground">Admin</span>
+        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {user ? (
+            <form method="post" action="/api/auth/signout">
               <Button type="submit" variant="ghost" size="icon" aria-label="Sign out" title="Sign out">
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -75,19 +80,24 @@ function NavContent({ pathname, signOut }: { pathname: string; signOut: boolean 
   );
 }
 
-export interface SidebarProps {
-  /** Show a sign-out control (the admin access gate is enabled). */
-  signOut?: boolean;
+export interface SidebarUser {
+  principal: string;
+  roles: string[];
 }
 
-export function Sidebar({ signOut = false }: SidebarProps) {
+export interface SidebarProps {
+  /** The signed-in user (`oidc` mode): shows their badge and Sign out. */
+  user?: SidebarUser | null;
+}
+
+export function Sidebar({ user = null }: SidebarProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 border-r bg-card md:block">
-        <NavContent pathname={pathname} signOut={signOut} />
+        <NavContent pathname={pathname} user={user} />
       </aside>
       <div className="flex items-center gap-2 border-b bg-card px-4 py-2 md:hidden">
         <Sheet open={open} onOpenChange={setOpen}>
@@ -99,7 +109,7 @@ export function Sidebar({ signOut = false }: SidebarProps) {
           <SheetContent side="left" className="w-56 p-0">
             <SheetTitle className="sr-only">Navigation</SheetTitle>
             <div onClick={() => setOpen(false)}>
-              <NavContent pathname={pathname} signOut={signOut} />
+              <NavContent pathname={pathname} user={user} />
             </div>
           </SheetContent>
         </Sheet>

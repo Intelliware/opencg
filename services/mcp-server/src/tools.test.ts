@@ -5,19 +5,15 @@ import {
   TOOL_DEFINITIONS,
   callTool,
 } from "./tools.js";
-import type { McpConfig } from "./config.js";
+import { loadConfig } from "./config.js";
 import type { PipelineClient } from "./pipeline-client.js";
 import { PipelineRequestError } from "./pipeline-client.js";
 
-const config: McpConfig = {
-  tenant: "default",
-  identity: { principal: "alice", roles: ["reader"] },
-  pipelineUrl: "http://unused",
-  port: 8080,
-  httpToken: null,
-  publicUrl: "http://localhost:8080",
-  oauthPassword: null,
-};
+const config = loadConfig({
+  OPENCG__IDENTITY__PRINCIPAL: "alice",
+  OPENCG__IDENTITY__ROLES: "reader",
+  OPENCG__PIPELINE__URL: "http://unused",
+});
 
 class FakePipeline {
   public lastRequest: any = null;

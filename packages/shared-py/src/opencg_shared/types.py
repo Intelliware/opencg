@@ -131,6 +131,8 @@ class AuditRecord(BaseModel):
     # Null on rows written before cost was recorded.
     estimated_cost_usd: float | None = None
     usage_by_provider: list[ProviderUsage] | None = None
+    # oidc | none | api_key; null on rows written before identity was recorded.
+    auth_method: str | None = None
 
 
 class IngestEvent(BaseModel):
@@ -243,6 +245,9 @@ class IngestionRun(BaseModel):
     parents: int | None = None
     chunks: int | None = None
     error: str | None = None
+    classification: str = "internal"
+    # The authenticated principal (the stub principal in `none` mode).
+    requested_by: str | None = None
 
 
 # --- Knowledge graph ------------------------------------------------------

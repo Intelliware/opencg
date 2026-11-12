@@ -46,6 +46,7 @@ jobs:
       - run: make lint
       - run: make typecheck
       - run: make test
+      - run: make opa-test # Rego tests + policy revision check, via the pinned OPA image
       - run: make storybook
       - run: make check-agent-guides
       - run: make check-dashboards
@@ -73,6 +74,14 @@ jobs:
     timeout-minutes: 45
     env:
       OLLAMA_CACHE_DIR: /tmp/ollama-models # outside the repo, so not in any build context
+      # Smoke and e2e run the real OIDC + OPA path against the bundled Keycloak
+      # (tests/smoke/lib.sh adds docker-compose.oidc.yml and the `idp` profile).
+      OPENCG_TEST_AUTH_MODE: oidc
+      IDP_IMAGES_TAR: /tmp/idp-images/images.tar
+      COMPOSE_TEST: >-
+        docker compose -f infra/compose/docker-compose.yml
+        -f infra/compose/docker-compose.smoke.yml -f infra/compose/docker-compose.oidc.yml
+        -f infra/compose/docker-compose.e2e.yml --env-file .env --profile dev --profile idp
     steps:
       - uses: actions/checkout@v7
 
@@ -158,6 +167,40 @@ jobs:
           docker run --rm -v opencg_ollama-data:/root/.ollama -v "$OLLAMA_CACHE_DIR:/cache:ro" \
             alpine:3 sh -c 'mkdir -p /root/.ollama/models && cp -a /cache/. /root/.ollama/models/'
 
+      # The pulled Keycloak and OPA images, saved as one tarball keyed by their
+      # pinned tags (compose has no layer cache for pulled images).
+      - name: Keycloak and OPA image cache key
+        id: idp-images
+        run: |
+          images="$(sed -n -e 's|^ *image: \(quay.io/keycloak/keycloak:.*\)$|\1|p' \
+            -e 's|^ *image: \(openpolicyagent/opa:.*\)$|\1|p' infra/compose/docker-compose.yml | sort -u | xargs)"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "key=idp-images-$(echo "$images" | tr ' /:' '-__')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: idp-images-cache
+        with:
+          path: /tmp/idp-images
+          key: ${{ steps.idp-images.outputs.key }}
+      - name: Load the Keycloak and OPA images (pull and save on a cache miss)
+        env:
+          IMAGES: ${{ steps.idp-images.outputs.images }}
+        run: |
+          if [ -f "$IDP_IMAGES_TAR" ]; then
+            docker load -i "$IDP_IMAGES_TAR"
+            exit 0
+          fi
+          for image in $IMAGES; do
+            for attempt in 1 2 3; do
+              docker pull --quiet "$image" && break
+              [ "$attempt" = 3 ] && exit 1
+              echo "pull of $image failed (attempt $attempt of 3); retrying in 15 s"
+              sleep 15
+            done
+          done
+          mkdir -p "$(dirname "$IDP_IMAGES_TAR")"
+          # shellcheck disable=SC2086 # one argument per image
+          docker save -o "$IDP_IMAGES_TAR" $IMAGES
+
       - name: Start the stack and wait for health
         run: |
           make up-d
@@ -175,6 +218,12 @@ jobs:
         with:
           path: ${{ env.OLLAMA_CACHE_DIR }}
           key: ${{ steps.ollama.outputs.key }}
+
+      - uses: actions/cache/save@v6
+        if: steps.idp-images-cache.outputs.cache-hit != 'true'
+        with:
+          path: /tmp/idp-images
+          key: ${{ steps.idp-images.outputs.key }}
 
       - run: make smoke
       - run: make e2e
@@ -196,16 +245,18 @@ jobs:
       - name: Collect compose logs
         if: failure()
         run: |
-          docker compose -f infra/compose/docker-compose.yml \
-            -f infra/compose/docker-compose.smoke.yml -f infra/compose/docker-compose.e2e.yml \
-            --env-file .env --profile dev logs --no-color --timestamps > compose-logs.txt 2>&1 || true
-          docker compose -f infra/compose/docker-compose.yml --env-file .env --profile dev ps -a >> compose-logs.txt 2>&1 || true
+          $COMPOSE_TEST logs --no-color --timestamps > compose-logs.txt 2>&1 || true
+          $COMPOSE_TEST ps -a >> compose-logs.txt 2>&1 || true
+          $COMPOSE_TEST logs --no-color --timestamps opa > opa-logs.txt 2>&1 || true
+          $COMPOSE_TEST logs --no-color --timestamps keycloak > keycloak-logs.txt 2>&1 || true
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: stack-failure-evidence
           path: |
             compose-logs.txt
+            opa-logs.txt
+            keycloak-logs.txt
             services/admin-ui/playwright-report/
             services/admin-ui/test-results/
           retention-days: 14
@@ -228,9 +279,16 @@ jobs:
     timeout-minutes: 45
     env:
       OLLAMA_CACHE_DIR: /tmp/ollama-models
+      # The smoke runs the real OIDC + OPA path here too (bundled Keycloak).
+      OPENCG_TEST_AUTH_MODE: oidc
+      IDP_IMAGES_TAR: /tmp/idp-images/images.tar
       COMPOSE_OBS: >-
         docker compose -f infra/compose/docker-compose.yml
         -f infra/compose/docker-compose.observability.yml --env-file .env --profile dev
+      COMPOSE_OBS_TEST: >-
+        docker compose -f infra/compose/docker-compose.yml
+        -f infra/compose/docker-compose.smoke.yml -f infra/compose/docker-compose.oidc.yml
+        -f infra/compose/docker-compose.observability.yml --env-file .env --profile dev --profile idp
     steps:
       - uses: actions/checkout@v7
 
@@ -275,6 +333,35 @@ jobs:
           docker run --rm -v opencg_ollama-data:/root/.ollama -v "$OLLAMA_CACHE_DIR:/cache:ro" \
             alpine:3 sh -c 'mkdir -p /root/.ollama/models && cp -a /cache/. /root/.ollama/models/'
 
+      # Read-only use of the stack job's Keycloak + OPA image cache (that job saves it).
+      - name: Keycloak and OPA image cache key
+        id: idp-images
+        run: |
+          images="$(sed -n -e 's|^ *image: \(quay.io/keycloak/keycloak:.*\)$|\1|p' \
+            -e 's|^ *image: \(openpolicyagent/opa:.*\)$|\1|p' infra/compose/docker-compose.yml | sort -u | xargs)"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "key=idp-images-$(echo "$images" | tr ' /:' '-__')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: /tmp/idp-images
+          key: ${{ steps.idp-images.outputs.key }}
+      - name: Load the Keycloak and OPA images (pull on a cache miss)
+        env:
+          IMAGES: ${{ steps.idp-images.outputs.images }}
+        run: |
+          if [ -f "$IDP_IMAGES_TAR" ]; then
+            docker load -i "$IDP_IMAGES_TAR"
+            exit 0
+          fi
+          for image in $IMAGES; do
+            for attempt in 1 2 3; do
+              docker pull --quiet "$image" && break
+              [ "$attempt" = 3 ] && exit 1
+              echo "pull of $image failed (attempt $attempt of 3); retrying in 15 s"
+              sleep 15
+            done
+          done
+
       - name: Pull the observability images (with retries)
         run: |
           for attempt in 1 2 3; do
@@ -292,11 +379,10 @@ jobs:
       - name: Collect compose logs and Prometheus target state
         if: failure()
         run: |
-          docker compose -f infra/compose/docker-compose.yml \
-            -f infra/compose/docker-compose.smoke.yml \
-            -f infra/compose/docker-compose.observability.yml \
-            --env-file .env --profile dev logs --no-color --timestamps > compose-logs.txt 2>&1 || true
-          $COMPOSE_OBS ps -a >> compose-logs.txt 2>&1 || true
+          $COMPOSE_OBS_TEST logs --no-color --timestamps > compose-logs.txt 2>&1 || true
+          $COMPOSE_OBS_TEST ps -a >> compose-logs.txt 2>&1 || true
+          $COMPOSE_OBS_TEST logs --no-color --timestamps opa > opa-logs.txt 2>&1 || true
+          $COMPOSE_OBS_TEST logs --no-color --timestamps keycloak > keycloak-logs.txt 2>&1 || true
           curl -fsS http://localhost:9090/api/v1/targets > prometheus-targets.json 2>&1 || true
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -304,6 +390,8 @@ jobs:
           name: observability-failure-evidence
           path: |
             compose-logs.txt
+            opa-logs.txt
+            keycloak-logs.txt
             prometheus-targets.json
           retention-days: 14
           if-no-files-found: ignore

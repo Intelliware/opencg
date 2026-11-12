@@ -198,8 +198,14 @@ class CatalogStore:
             }
             return data
 
-    async def tombstone(self, *, tenant: str, entity_id: str) -> dict[str, Any] | None:
-        """Soft delete. Idempotent — re-tombstoning preserves the original timestamp."""
+    async def tombstone(
+        self, *, tenant: str, entity_id: str, on_conn: Any | None = None
+    ) -> dict[str, Any] | None:
+        """Soft delete. Idempotent — re-tombstoning preserves the original timestamp.
+
+        `on_conn(conn)` runs in the same transaction after a successful update
+        (the pipeline writes its access audit row there).
+        """
         pool = self._require_pool()
         sql = """
         UPDATE opencg.entity
@@ -208,8 +214,10 @@ class CatalogStore:
         RETURNING entity_id::text, tenant, source, source_uri, title,
                   classification, freshness_state, updated_at, tombstoned_at
         """
-        async with pool.acquire() as conn:
+        async with pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow(sql, tenant, entity_id)
+            if row is not None and on_conn is not None:
+                await on_conn(conn)
         return dict(row) if row else None
 
     async def live_entity_ids(self, *, tenant: str, entity_ids: list[str]) -> set[str]:

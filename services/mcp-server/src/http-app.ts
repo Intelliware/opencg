@@ -1,19 +1,27 @@
 // HTTP surface of the MCP server: health endpoints, the unauthenticated
-// Prometheus `/metrics`, and the MCP protocol at `/mcp` behind either the
-// static bearer gate or the stopgap OAuth router (see src/oauth.ts).
+// Prometheus `/metrics`, the OAuth protected-resource metadata (oidc mode), and
+// the MCP protocol at `/mcp` behind the caller authenticator (src/auth.ts).
+//
+// The MCP server is an OAuth resource server only (design D4): it serves no
+// `/authorize`, `/token`, `/register`, `/revoke` or authorization-server
+// metadata, so those paths fall through to Express's 404.
 
-import express, { type Express } from "express";
-import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
-import {
-  getOAuthProtectedResourceMetadataUrl,
-  mcpAuthRouter,
-} from "@modelcontextprotocol/sdk/server/auth/router.js";
+import express, { type Express, type Request, type Response } from "express";
 import { countAuthRejections, metricsHandler } from "./metrics.js";
-import { createStopgapOAuth } from "./oauth.js";
-import { dispatchMcp, handleMcpHttp } from "./server.js";
-import type { ToolCallContext } from "./tools.js";
+import { type HttpContext, handleMcpHttp } from "./server.js";
 
-export function createHttpApp(ctx: ToolCallContext): Express {
+/** RFC 9728 protected-resource metadata for `oidc` mode. */
+export function protectedResourceMetadata(ctx: HttpContext): Record<string, unknown> {
+  const { publicUrl, oidc } = ctx.config;
+  return {
+    resource: `${publicUrl}/mcp`,
+    authorization_servers: oidc ? [oidc.issuer] : [],
+    bearer_methods_supported: ["header"],
+    scopes_supported: ["openid"],
+  };
+}
+
+export function createHttpApp(ctx: HttpContext): Express {
   const { config, pipeline } = ctx;
   const app = express();
   app.disable("x-powered-by");
@@ -31,30 +39,19 @@ export function createHttpApp(ctx: ToolCallContext): Express {
     void metricsHandler(req, res);
   });
 
-  app.use("/mcp", countAuthRejections);
-
-  if (config.oauthPassword) {
-    const { provider, approveHandler } = createStopgapOAuth({
-      password: config.oauthPassword,
-      staticToken: config.httpToken,
-    });
-    const issuerUrl = new URL(config.publicUrl);
-    app.use(mcpAuthRouter({ provider, issuerUrl, resourceName: "openCG MCP" }));
-    app.post("/oauth/approve", express.urlencoded({ extended: false }), approveHandler);
-    const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(issuerUrl);
-    app.all(
-      "/mcp",
-      requireBearerAuth({ verifier: provider, resourceMetadataUrl }),
-      (req, res) => {
-        void dispatchMcp(req, res, ctx);
-      },
-    );
-  } else {
-    // OAuth disabled: static-bearer gate (or open) — unchanged behaviour.
-    app.all("/mcp", (req, res) => {
-      void handleMcpHttp(req, res, ctx);
-    });
+  if (config.authMode === "oidc") {
+    const metadata = (_req: Request, res: Response) => {
+      res.json(protectedResourceMetadata(ctx));
+    };
+    // Bare and path-suffixed (`/mcp`) forms: clients probe either.
+    app.get("/.well-known/oauth-protected-resource", metadata);
+    app.get("/.well-known/oauth-protected-resource/mcp", metadata);
   }
+
+  app.use("/mcp", countAuthRejections);
+  app.all("/mcp", (req, res) => {
+    void handleMcpHttp(req, res, ctx);
+  });
 
   return app;
 }

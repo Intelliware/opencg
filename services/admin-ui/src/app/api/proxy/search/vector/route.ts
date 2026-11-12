@@ -3,18 +3,19 @@
 // URL directly, so this server route brokers the call.
 
 import { vectorSearch } from "@/lib/api";
+import { PipelineAuthError, authErrorResponse } from "@/lib/auth/errors";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const out = await vectorSearch(body);
-  if (out === null) {
-    return new Response(JSON.stringify({ error: "search failed" }), {
-      status: 502,
-      headers: { "content-type": "application/json" },
-    });
+  let out;
+  try {
+    out = await vectorSearch(body);
+  } catch (error) {
+    if (error instanceof PipelineAuthError) return authErrorResponse(error);
+    throw error;
   }
-  return new Response(JSON.stringify(out), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  if (out === null) {
+    return Response.json({ error: "search failed" }, { status: 502 });
+  }
+  return Response.json(out, { status: 200 });
 }

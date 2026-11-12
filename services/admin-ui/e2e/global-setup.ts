@@ -1,30 +1,20 @@
-import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { request } from "@playwright/test";
+import { chromium } from "@playwright/test";
 
 import {
   ADMIN_URL,
-  AUTH_STATE,
-  FIXTURE_SCRIPT,
-  GATED_URL,
-  MAIN_PASSWORD,
+  ALICE_STATE,
+  BOB_STATE,
+  OIDC_ISSUER,
   PIPELINE_URL,
+  TEST_AUTH_MODE,
+  USERS,
 } from "./env";
+import { fixture } from "./fixture-cli";
+import { signInThroughIdp } from "./idp";
 
-function fixture(...args: string[]): string {
-  const result = spawnSync("bash", [FIXTURE_SCRIPT, ...args], {
-    env: { ...process.env, OPENCG_E2E: "1" },
-    encoding: "utf8",
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  if (result.status !== 0) {
-    throw new Error(`fixture.sh ${args.join(" ")} failed (exit ${result.status}):\n${output}`);
-  }
-  return output;
-}
-
-async function waitFor(url: string, timeoutMs = 120_000): Promise<void> {
+async function waitFor(url: string, timeoutMs = 180_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let last = "";
   while (Date.now() < deadline) {
@@ -40,18 +30,41 @@ async function waitFor(url: string, timeoutMs = 120_000): Promise<void> {
   throw new Error(`${url} not ready after ${timeoutMs / 1000}s (${last}); is the stack up (make up-d)?`);
 }
 
+/** Sign in through the Keycloak login page and save the browser's storage state. */
+async function saveSignedInState(user: keyof typeof USERS, file: string): Promise<void> {
+  const password = USERS[user].password();
+  if (!password) throw new Error(`no password for ${user}: set the OPENCG__IDP__* values from .env.example in .env`);
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ baseURL: ADMIN_URL });
+    const page = await context.newPage();
+    await page.goto("/");
+    await signInThroughIdp(page, USERS[user].username, password);
+    await page.waitForURL(`${ADMIN_URL}/`);
+    await page.getByLabel(`Signed in as ${USERS[user].username}`).first().waitFor();
+    mkdirSync(path.dirname(file), { recursive: true });
+    await context.storageState({ path: file });
+  } finally {
+    await browser.close();
+  }
+}
+
 export default async function globalSetup() {
   const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
   const runId = `e2e-${stamp}-${process.pid}`;
   const uiRunId = `${runId}-ui`;
 
-  console.log(`[e2e] run ${runId}: applying the smoke + e2e overlays`);
+  console.log(`[e2e] run ${runId}: applying the smoke + e2e overlays (auth mode ${TEST_AUTH_MODE})`);
   fixture("up");
-  await Promise.all([
-    waitFor(`${PIPELINE_URL}/readyz`),
-    waitFor(`${ADMIN_URL}/api/healthz`),
-    waitFor(`${GATED_URL}/api/healthz`),
-  ]);
+  const ready = [waitFor(`${PIPELINE_URL}/readyz`), waitFor(`${ADMIN_URL}/api/healthz`)];
+  if (TEST_AUTH_MODE === "oidc") ready.push(waitFor(`${OIDC_ISSUER}/.well-known/openid-configuration`));
+  await Promise.all(ready);
+
+  if (TEST_AUTH_MODE === "oidc") {
+    console.log(`[e2e] signing in through ${OIDC_ISSUER} as alice (admin) and bob (reader)`);
+    await saveSignedInState("alice", ALICE_STATE);
+    await saveSignedInState("bob", BOB_STATE);
+  }
 
   fixture("create", runId);
   const summary = fixture("ingest", runId);
@@ -64,20 +77,6 @@ export default async function globalSetup() {
 
   process.env.E2E_RUN_ID = runId;
   process.env.E2E_UI_RUN_ID = uiRunId;
-
-  if (MAIN_PASSWORD) {
-    mkdirSync(path.dirname(AUTH_STATE), { recursive: true });
-    const ctx = await request.newContext({ baseURL: ADMIN_URL });
-    const res = await ctx.post("/api/auth/login", {
-      form: { password: MAIN_PASSWORD, next: "/" },
-      maxRedirects: 0,
-    });
-    if (res.status() !== 303 || !res.headers()["set-cookie"]) {
-      throw new Error(`could not sign in to the gated admin UI (HTTP ${res.status()})`);
-    }
-    await ctx.storageState({ path: AUTH_STATE });
-    await ctx.dispose();
-  }
 
   return async () => {
     fixture("remove", runId);

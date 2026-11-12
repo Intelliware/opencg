@@ -5,6 +5,31 @@ name: opencg
 # can be dodged from .env. Set OPENCG__BIND_ADDRESS=0.0.0.0 only on purpose.
 # Smoke/e2e-only wiring (chat stub, fixture mount) lives in
 # docker-compose.smoke.yml and is not part of the default stack.
+#
+# Identity and policy (add-identity-and-opa): every openCG service gets the same
+# auth variables from the anchor below, so they cannot disagree. Defaults keep
+# the open local mode (OPENCG__AUTH__MODE=none, OPENCG__ENVIRONMENT=dev). The
+# bundled Keycloak is in the `idp` profile; the Makefile adds that profile when
+# OPENCG__AUTH__MODE=oidc points at it. OPA is in `dev` and always runs.
+
+# Auth + policy settings shared by pipeline, ingestion, mcp-server and admin-ui.
+# A key with no value is passed through only when set in the shell or .env.
+x-opencg-auth-env: &opencg-auth-env
+  # The compose stack is a dev stack; the services themselves treat an unset
+  # OPENCG__ENVIRONMENT as production.
+  OPENCG__ENVIRONMENT: ${OPENCG__ENVIRONMENT:-dev}
+  # Each service refuses `none` mode when this is not a loopback address.
+  OPENCG__BIND_ADDRESS: ${OPENCG__BIND_ADDRESS:-127.0.0.1}
+  OPENCG__AUTH__MODE: ${OPENCG__AUTH__MODE:-none}
+  OPENCG__AUTH__OIDC__ISSUER:
+  OPENCG__AUTH__OIDC__INTERNAL_URL:
+  OPENCG__AUTH__OIDC__AUDIENCE: ${OPENCG__AUTH__OIDC__AUDIENCE:-opencg}
+  OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM: ${OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM:-preferred_username}
+  OPENCG__AUTH__OIDC__ROLES_CLAIM: ${OPENCG__AUTH__OIDC__ROLES_CLAIM:-roles}
+  OPENCG__AUTH__OIDC__TENANT_CLAIM:
+  OPENCG__AUTH__API_KEYS_FILE:
+  OPENCG__OPA__URL: ${OPENCG__OPA__URL:-http://opa:8181}
+  OPENCG__OPA__TIMEOUT_MS: ${OPENCG__OPA__TIMEOUT_MS:-2000}
 
 services:
   # -----------------------------------------------------------------------
@@ -19,6 +44,9 @@ services:
       POSTGRES_USER: ${OPENCG__POSTGRES__USER:-opencg}
       POSTGRES_PASSWORD: ${OPENCG__POSTGRES__PASSWORD:-opencg}
       POSTGRES_DB: ${OPENCG__POSTGRES__DB:-opencg}
+      # Read by init/015_keycloak_db.sh to create the bundled Keycloak's own
+      # database and role. Unset (the `none`-mode default) skips it.
+      OPENCG__KEYCLOAK__DB_PASSWORD:
     ports:
       - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__POSTGRES__HOST_PORT:-5432}:5432"
     volumes:
@@ -74,6 +102,97 @@ services:
     profiles: [dev]
 
   # -----------------------------------------------------------------------
+  # Policy and identity
+  # -----------------------------------------------------------------------
+  # Open Policy Agent: entitlement and admin-action decisions (infra/opa/).
+  # Host port 8281 because the MCP server's host port is 8181.
+  opa:
+    # 1.21.4 pushed 2026-10-23 (design.md, "Pinned images").
+    image: openpolicyagent/opa:1.21.4
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --log-level=info
+      - /policy/policies
+      - /policy/data
+    volumes:
+      - ../opa/policies:/policy/policies:ro
+      - ../opa/data:/policy/data:ro
+    ports:
+      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__OPA__HOST_PORT:-8281}:8181"
+    healthcheck:
+      # The image has no shell or curl; OPA's own http.send probes /health.
+      test:
+        - CMD
+        - /opa
+        - eval
+        - --fail
+        - http.send({"method":"GET","url":"http://127.0.0.1:8181/health","timeout":"2s"}).status_code == 200
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    profiles: [dev]
+
+  # Bundled Keycloak: the OIDC provider for `oidc` mode when no external IdP is
+  # configured (smoke, e2e, CI, local). Profile `idp`, added by the Makefile;
+  # never started in `none` mode. State lives in the `keycloak` database on the
+  # stack's Postgres (init/015_keycloak_db.sh). infra/keycloak/entrypoint.sh
+  # picks dev mode + dev users (OPENCG__ENVIRONMENT dev/test) or production
+  # mode without users (staging/production).
+  keycloak:
+    # 26.8.1-1 pushed 2026-10-23 (design.md, "Pinned images").
+    image: quay.io/keycloak/keycloak:26.8.1-1
+    entrypoint: ["/bin/bash", "/opt/opencg/keycloak/entrypoint.sh"]
+    environment:
+      OPENCG__ENVIRONMENT: ${OPENCG__ENVIRONMENT:-dev}
+      KC_DB: postgres
+      KC_DB_URL: ${OPENCG__KEYCLOAK__DB_URL:-jdbc:postgresql://postgres:5432/keycloak}
+      KC_DB_USERNAME: ${OPENCG__KEYCLOAK__DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${OPENCG__KEYCLOAK__DB_PASSWORD:-}
+      # Public URL: browsers use it and every token's `iss` carries it, also for
+      # tokens fetched by containers through http://keycloak:8080 (dynamic
+      # backchannel). Must match OPENCG__AUTH__OIDC__ISSUER minus /realms/opencg.
+      KC_HOSTNAME: ${OPENCG__KEYCLOAK__PUBLIC_URL:-http://localhost:${OPENCG__KEYCLOAK__HOST_PORT:-8380}}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${OPENCG__KEYCLOAK__ADMIN_PASSWORD:-}
+      # Realm import placeholders (infra/keycloak/*.json).
+      OPENCG__ADMIN_UI__PUBLIC_URL: ${OPENCG__ADMIN_UI__PUBLIC_URL:-http://localhost:${OPENCG__ADMIN_UI__HOST_PORT:-3000}}
+      OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET:
+      OPENCG__SMOKE__CLIENT_SECRET:
+      OPENCG__SMOKE_READER__CLIENT_SECRET:
+      OPENCG__SMOKE_LEGAL__CLIENT_SECRET:
+      OPENCG__IDP__ALICE_PASSWORD:
+      OPENCG__IDP__BOB_PASSWORD:
+      OPENCG__IDP__CAROL_PASSWORD:
+    volumes:
+      - ../keycloak/entrypoint.sh:/opt/opencg/keycloak/entrypoint.sh:ro
+      - ../keycloak/realm-opencg.json:/opt/opencg/keycloak/realm-opencg.json:ro
+      - ../keycloak/realm-opencg-dev-users.json:/opt/opencg/keycloak/realm-opencg-dev-users.json:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports:
+      # 8380, not 8080 (commonly taken). Container port 8080.
+      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__KEYCLOAK__HOST_PORT:-8380}:8080"
+    healthcheck:
+      # No curl in the image: plain HTTP over bash's /dev/tcp to the
+      # management port (9000).
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 30s
+    profiles: [idp]
+
+  # -----------------------------------------------------------------------
   # Embeddings backend (local Ollama; Cloud is documented but unused in v0
   # because /api/embed is gated for the reference account — see
   # openspec/changes/archive/2026-11-10-bootstrap-thin-mvp/design.md D1).
@@ -115,12 +234,14 @@ services:
       # Derived from the Postgres credentials unless .env sets the URL itself
       # (e.g. to point at an external database).
       OPENCG__POSTGRES__URL: ${OPENCG__POSTGRES__URL:-postgresql://${OPENCG__POSTGRES__USER:-opencg}:${OPENCG__POSTGRES__PASSWORD:-opencg}@postgres:5432/${OPENCG__POSTGRES__DB:-opencg}}
+      <<: *opencg-auth-env
     depends_on:
       postgres: { condition: service_healthy }
       qdrant:   { condition: service_healthy }
       valkey:   { condition: service_healthy }
       ollama:   { condition: service_healthy }
       otel-collector: { condition: service_healthy }
+      opa:      { condition: service_healthy }
     ports:
       - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__PIPELINE__HOST_PORT:-8000}:8000"
     healthcheck:
@@ -136,6 +257,12 @@ services:
       dockerfile: services/mcp-server/Dockerfile
     image: opencg/mcp-server:local
     env_file: ../../.env
+    environment:
+      <<: *opencg-auth-env
+      # Base URL MCP clients use; the protected-resource metadata names it.
+      OPENCG__MCP__PUBLIC_URL: ${OPENCG__MCP__PUBLIC_URL:-http://localhost:${OPENCG__MCP__HOST_PORT:-8181}}
+      # stdio transport in `oidc` mode only.
+      OPENCG__MCP__STDIO_TOKEN:
     depends_on:
       pipeline: { condition: service_healthy }
     ports:
@@ -158,6 +285,7 @@ services:
       # counters here, and the server's /metrics sums them. Container env is
       # inherited by exec'd processes, so CLI runs pick it up too.
       PROMETHEUS_MULTIPROC_DIR: /run/opencg-metrics
+      <<: *opencg-auth-env
     # The multiprocess directory must start empty, or files from an earlier run
     # would be counted. A tmpfs is recreated empty on every container start;
     # the command below also clears it explicitly before starting the server
@@ -176,6 +304,7 @@ services:
       qdrant:   { condition: service_healthy }
       ollama:   { condition: service_healthy }
       otel-collector: { condition: service_healthy }
+      opa:      { condition: service_healthy }
     ports:
       - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__INGESTION__HOST_PORT:-8100}:8100"
     healthcheck:
@@ -191,8 +320,17 @@ services:
       dockerfile: services/admin-ui/Dockerfile
     image: opencg/admin-ui:local
     env_file: ../../.env
+    environment:
+      <<: *opencg-auth-env
+      OPENCG__ADMIN_UI__OIDC__CLIENT_ID: ${OPENCG__ADMIN_UI__OIDC__CLIENT_ID:-opencg-admin-ui}
+      OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET:
+      # Browser-facing base URL: OIDC redirect and post-logout URIs derive from it.
+      OPENCG__ADMIN_UI__PUBLIC_URL: ${OPENCG__ADMIN_UI__PUBLIC_URL:-http://localhost:${OPENCG__ADMIN_UI__HOST_PORT:-3000}}
+      # Server-side sign-in sessions live in Valkey.
+      OPENCG__VALKEY__URL: ${OPENCG__VALKEY__URL:-redis://valkey:6379/0}
     depends_on:
       pipeline: { condition: service_healthy }
+      valkey:   { condition: service_healthy }
     ports:
       - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__ADMIN_UI__HOST_PORT:-3000}:3000"
     profiles: [dev]

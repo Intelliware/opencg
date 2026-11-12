@@ -1,6 +1,12 @@
 # Shared helpers for tests/smoke/run.sh and tests/smoke/fixture.sh. Source it;
 # don't execute it. Sets ROOT and COMPOSE.
 #
+# OPENCG_TEST_AUTH_MODE (default `oidc`) picks the auth path the stack runs
+# under for smoke and e2e, whatever .env says (design D13): `oidc` adds the
+# infra/compose/docker-compose.oidc.yml overlay and the `idp` profile (bundled
+# Keycloak) and the helpers below fetch client-credentials tokens; `none` forces
+# the open single-user mode (no Keycloak) for quick local runs.
+#
 # Set OPENCG_E2E=1 to add the e2e overlay on top of the smoke overlay (see
 # infra/compose/docker-compose.e2e.yml). Set SMOKE_OBS=1 (what `make smoke-obs`
 # does) to add the OPTIONAL observability overlay (Prometheus, Tempo, Grafana;
@@ -26,6 +32,20 @@ COMPOSE=(
   -f "$ROOT/infra/compose/docker-compose.yml"
   -f "$ROOT/infra/compose/docker-compose.smoke.yml"
 )
+TEST_AUTH_MODE="${OPENCG_TEST_AUTH_MODE:-oidc}"
+case "$TEST_AUTH_MODE" in
+  oidc | none) ;;
+  *)
+    echo "OPENCG_TEST_AUTH_MODE must be 'oidc' or 'none' (got '$TEST_AUTH_MODE')" >&2
+    exit 2
+    ;;
+esac
+if [ "$TEST_AUTH_MODE" = "oidc" ]; then
+  COMPOSE+=(-f "$ROOT/infra/compose/docker-compose.oidc.yml")
+else
+  # The base compose file reads the mode from the shell first, then .env.
+  export OPENCG__AUTH__MODE=none
+fi
 if [ "${OPENCG_E2E:-0}" = "1" ]; then
   COMPOSE+=(-f "$ROOT/infra/compose/docker-compose.e2e.yml")
 fi
@@ -33,6 +53,108 @@ if [ "${SMOKE_OBS:-0}" = "1" ]; then
   COMPOSE+=(-f "$ROOT/infra/compose/docker-compose.observability.yml")
 fi
 COMPOSE+=(--env-file "$ROOT/.env" --profile dev)
+if [ "$TEST_AUTH_MODE" = "oidc" ]; then
+  COMPOSE+=(--profile idp)
+fi
+
+# The services the overlays touch. Bringing all of them up (not just ingestion)
+# recreates every openCG service whose auth settings changed.
+OVERLAY_SERVICES=(smoke-chat pipeline ingestion mcp-server admin-ui)
+if [ "$TEST_AUTH_MODE" = "oidc" ]; then
+  OVERLAY_SERVICES+=(keycloak)
+fi
+
+# ---------------------------------------------------------------------------
+# Tokens (oidc mode). Client-credentials grant against the bundled Keycloak's
+# host-published port; the token's `iss` is the public issuer the services
+# expect. Secrets come from the environment or .env and are never printed.
+# ---------------------------------------------------------------------------
+
+KEYCLOAK_URL="${KEYCLOAK_URL:-$(cfg OPENCG__KEYCLOAK__PUBLIC_URL "http://localhost:$(cfg OPENCG__KEYCLOAK__HOST_PORT 8380)")}"
+OIDC_ISSUER="$KEYCLOAK_URL/realms/opencg"
+# Header files (one per client), so tokens never appear on a command line.
+AUTH_HEADER_DIR=""
+# Keycloak's dev realm issues 300 s access tokens; refetch well before expiry.
+TOKEN_MAX_AGE_SECONDS="${TOKEN_MAX_AGE_SECONDS:-200}"
+
+# client_secret_var CLIENT_ID: the variable that holds the client's secret.
+client_secret_var() {
+  case "$1" in
+    opencg-smoke) echo OPENCG__SMOKE__CLIENT_SECRET ;;
+    opencg-smoke-reader) echo OPENCG__SMOKE_READER__CLIENT_SECRET ;;
+    opencg-smoke-legal) echo OPENCG__SMOKE_LEGAL__CLIENT_SECRET ;;
+    *) return 1 ;;
+  esac
+}
+
+# fetch_token CLIENT_ID: print an access token from the client-credentials grant.
+fetch_token() {
+  local client="$1" var secret
+  var="$(client_secret_var "$client")" || { echo "unknown smoke client $client" >&2; return 2; }
+  secret="$(cfg "$var" "")"
+  [ -n "$secret" ] || { echo "$var is not set (environment or .env)" >&2; return 2; }
+  curl -fsS --max-time 15 -X POST "$OIDC_ISSUER/protocol/openid-connect/token" \
+    --data-urlencode grant_type=client_credentials \
+    --data-urlencode "client_id=$client" \
+    --data-urlencode "client_secret=$secret" \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["access_token"])'
+}
+
+# auth_header_file CLIENT_ID: path of a curl header file (`-H @file`) holding a
+# fresh bearer token for CLIENT_ID; fetched on first use and when older than
+# TOKEN_MAX_AGE_SECONDS. Only valid in oidc mode.
+auth_header_file() {
+  local client="$1" file token now
+  [ -n "$AUTH_HEADER_DIR" ] || { echo "auth_init has not run" >&2; return 1; }
+  file="$AUTH_HEADER_DIR/$client.header"
+  now="$(date +%s)"
+  if [ ! -s "$file" ] || [ $((now - $(cat "$file.at" 2>/dev/null || echo 0))) -ge "$TOKEN_MAX_AGE_SECONDS" ]; then
+    token="$(fetch_token "$client")" || return 1
+    [ -n "$token" ] || return 1
+    (umask 077 && printf 'authorization: Bearer %s\n' "$token" >"$file")
+    printf '%s' "$now" >"$file.at"
+  fi
+  printf '%s' "$file"
+}
+
+# bearer_token CLIENT_ID: print the cached token (for clients that cannot read a
+# header file). Never echo the result to the terminal.
+bearer_token() {
+  local file
+  file="$(auth_header_file "$1")" || return 1
+  sed -n 's/^authorization: Bearer //p' "$file"
+}
+
+# auth_init: create the header-file directory. Call it once from the top-level
+# shell (not inside $(...)), so every later subshell shares the token cache.
+auth_init() {
+  if [ -z "$AUTH_HEADER_DIR" ]; then
+    AUTH_HEADER_DIR="$(mktemp -d)"
+    chmod 700 "$AUTH_HEADER_DIR"
+  fi
+}
+
+auth_cleanup() {
+  if [ -n "$AUTH_HEADER_DIR" ]; then
+    rm -rf "$AUTH_HEADER_DIR"
+  fi
+}
+
+# acurl_as CLIENT_ID CURL_ARGS...: curl with CLIENT_ID's bearer token in oidc
+# mode, plain curl in none mode.
+acurl_as() {
+  local client="$1" file
+  shift
+  if [ "$TEST_AUTH_MODE" = "oidc" ]; then
+    file="$(auth_header_file "$client")" || { echo "no token for $client" >&2; return 1; }
+    curl -H "@$file" "$@"
+  else
+    curl "$@"
+  fi
+}
+
+# acurl CURL_ARGS...: curl as the main smoke service account (admin, reader).
+acurl() { acurl_as opencg-smoke "$@"; }
 
 # A fixture named after RUN_ID lives at /tmp/opencg-smoke-<RUN_ID> inside the
 # ingestion container, and every entity it produces has this source_uri prefix.
@@ -61,11 +183,12 @@ fixture_create() {
   ' sh "$(fixture_dir "$run_id")" "$run_id" "$mode"
 }
 
-# fixture_ingest RUN_ID [stub|cloud]: ingest the fixture with the CLI. Stub mode
-# points extraction at the compose-internal chat stub; cloud mode uses the
-# ingestion container's configured provider with tighter bounds.
+# fixture_ingest RUN_ID [stub|cloud] [CLASSIFICATION]: ingest the fixture with
+# the CLI. Stub mode points extraction at the compose-internal chat stub; cloud
+# mode uses the ingestion container's configured provider with tighter bounds.
+# CLASSIFICATION (default `internal`) is stamped on every entity of the run.
 fixture_ingest() {
-  local run_id="$1" mode="${2:-stub}"
+  local run_id="$1" mode="${2:-stub}" classification="${3:-internal}"
   local args=(exec -T)
   local max_documents max_chunks
   if [ "$mode" = "stub" ]; then
@@ -85,7 +208,19 @@ fixture_ingest() {
     uv run --package opencg-ingestion \
     python -m opencg_ingestion.cli git "$(fixture_dir "$run_id")" \
     --max-documents "$max_documents" \
-    --max-chunks "$max_chunks"
+    --max-chunks "$max_chunks" \
+    --classification "$classification"
+}
+
+# fixture_add_phrase RUN_ID PHRASE: append a line with PHRASE to the fixture's
+# README and commit, so lexical retrieval can single the copy out.
+fixture_add_phrase() {
+  "${COMPOSE[@]}" exec -T ingestion sh -c '
+    set -eu
+    printf "\nPrivileged legal matter %s: settlement terms are restricted.\n" "$2" >>"$1/README.md"
+    git -C "$1" add README.md
+    git -C "$1" commit -qm "legal phrase"
+  ' sh "$(fixture_dir "$1")" "$2"
 }
 
 # fixture_remove RUN_ID: delete the fixture copy (catalogue rows stay; every
@@ -139,11 +274,16 @@ print(f"{total:g}")
 # ---------------------------------------------------------------------------
 
 # mcp_retrieve MCP_URL QUERY: call opencg/retrieve_for_context over HTTP and
-# print the result's correlation_id. Sends OPENCG__MCP__HTTP_TOKEN as a bearer
-# token when it is set (in the environment or .env); the token is never printed.
+# print the result's correlation_id. In oidc mode it sends the opencg-smoke
+# service account's token; in none mode OPENCG__MCP__HTTP_TOKEN when it is set
+# (in the environment or .env). The token is never printed.
 mcp_retrieve() {
   local token
-  token="$(cfg OPENCG__MCP__HTTP_TOKEN "")"
+  if [ "$TEST_AUTH_MODE" = "oidc" ]; then
+    token="$(bearer_token opencg-smoke)" || { echo "no token for opencg-smoke" >&2; return 1; }
+  else
+    token="$(cfg OPENCG__MCP__HTTP_TOKEN "")"
+  fi
   MCP_TOKEN="$token" python3 - "$1" "$2" <<'PY'
 import json, os, sys, urllib.error, urllib.request
 
