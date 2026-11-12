@@ -15,10 +15,16 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ### Changed
 
+- **Admin UI on Next.js 16.4.5 and React 19** (`upgrade-admin-ui-next-16`). 16.4.5 is taken as a recorded exception to the two-week rule because it is a security release. `middleware.ts` is now `proxy.ts` (Node runtime). Contributors need Node 20.9 or newer.
+- New `make hydration-stress` check; CI runs a smaller pass nightly.
 - The default chat model (used by knowledge-graph text extraction) is now Ollama Cloud `gemma4:31b` instead of `gemma3:4b`, which has no published per-token price. Set `OPENCG__PROVIDERS__CHAT__MODEL` to keep the old model.
 - **Provider label for Ollama Cloud chat is now `ollama-cloud`** (was `ollama`) on tokens, cost, provider errors and spans; `providers.chat.provider` defaults to `ollama-cloud`, and an older `provider: ollama` block with an `ollama.com` base URL is relabelled at start-up. Queries or dashboards that filter chat on `provider="ollama"` need updating.
 - Embedding tokens spent during ingestion are now counted (`opencg_tokens_total{stage="ingest_embed"}`).
 - `make down` and `make down-v` also remove the observability overlay's containers (and, for `down-v`, its volumes) and orphaned overlay services.
+
+### Fixed
+
+- Intermittent React hydration error #418 in the admin UI under load (#2): 0 in 1,680 stressed loads on Next 16 vs 34 in 560 on 15.5.29. The e2e reload workaround is removed.
 
 ## [0.1.0] - 2026-11-10
 

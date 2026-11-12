@@ -14,6 +14,7 @@ export function ConceptSearch({ onSelect }: { onSelect: (conceptId: string) => v
   useEffect(() => {
     const q = query.trim();
     if (!q) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the debounced search when the query is emptied
       setResults([]);
       setSearched(false);
       setOpen(false);

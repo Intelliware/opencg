@@ -61,7 +61,7 @@ The thin MVP, the first end-to-end working slice, runs in Docker Compose, with a
 | Cache | Valkey |
 | Embeddings | Ollama (`nomic-embed-text`, compose-internal) |
 | Chat / extraction | Ollama Cloud (`gemma4:31b` default) |
-| Admin UI | Next.js 15 (App Router) + Storybook |
+| Admin UI | Next.js 16 (App Router, React 19) + Storybook |
 | Observability | OpenTelemetry → Collector → Tempo, Prometheus, Grafana (opt-in: `make up-obs`); `/metrics` on every service |
 | Tests | pytest, vitest, Playwright (admin UI end-to-end), a deterministic smoke script |
 | Deployment | Docker Compose (`dev` profile; smoke and e2e overlays for tests) |

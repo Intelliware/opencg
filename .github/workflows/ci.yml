@@ -178,6 +178,20 @@ jobs:
 
       - run: make smoke
       - run: make e2e
+      # Nightly regression guard for issue #2 (upgrade-admin-ui-next-16, D3):
+      # a smaller hydration stress pass against the seeded production build.
+      - name: Hydration stress (nightly)
+        if: github.event_name == 'schedule'
+        env:
+          SUMMARY_FILE: ${{ github.workspace }}/hydration-stress.json
+        run: make hydration-stress BROWSERS=4 CYCLES=10
+      - uses: actions/upload-artifact@v7
+        if: always() && github.event_name == 'schedule'
+        with:
+          name: hydration-stress-summary
+          path: hydration-stress.json
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Collect compose logs
         if: failure()

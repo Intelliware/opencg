@@ -408,6 +408,15 @@ The admin UI's `/queries` page consumes these.
 - **`make e2e` says Chromium is missing**: `make bootstrap` installs it, or run `pnpm --filter @opencg/admin-ui exec playwright install chromium`. On Linux add `--with-deps` for the system libraries.
 - **Images rebuild slowly or the build context is huge**: the repo-root `.dockerignore` keeps `node_modules`, `.venv` and build output out of the context. If you vendor something large, add it there.
 
+### Hydration stress check
+
+`make hydration-stress` loads every admin route from several concurrent Chromium browsers against the running production build and counts React hydration errors (#418), other console errors, pages that never hydrated, and client navigations that don't commit within 5 s. It prints a JSON summary (set `SUMMARY_FILE` to also write it to a file) and fails if any count is above zero.
+
+- It needs seeded data, so run it after `make smoke` or `make e2e`.
+- Defaults: `BROWSERS=7 CYCLES=30`, 1,680 page loads, a few minutes. Override with `make hydration-stress BROWSERS=4 CYCLES=10`.
+- Run the full default pass on **every Next.js or React version bump**. CI runs the smaller 4 × 10 pass nightly in the `stack` job.
+- Background: issue #2 only appeared under this kind of load. On Next 15.5.29 it hit about 6–8% of loads; it must stay at zero.
+
 ### Running stack
 
 - **`make up-d` hangs on `ollama` health** — first start has to download the embedding model. Tail `docker compose logs ollama` to watch the pull. If it hangs longer than ~5 minutes, check the host's network access to `registry.ollama.ai`.

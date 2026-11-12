@@ -35,19 +35,10 @@ test.describe("every route renders against live services", () => {
   test("each page loads with no error boundary, console error or failed request", async ({ page }) => {
     for (const route of routes()) {
       await test.step(route.path, async () => {
-        let problems = watchPage(page, ADMIN_URL);
+        const problems = watchPage(page, ADMIN_URL);
         const res = await page.goto(route.path);
         expect(res?.status(), route.path).toBe(200);
         await page.waitForLoadState("networkidle");
-        // A known intermittent production hydration error (issue #2) hits about
-        // 1 load in 100 on any route. Reload once; a deterministic mismatch recurs.
-        if (problems.console.length && problems.console.every((msg) => msg.includes("React error #418"))) {
-          test.info().annotations.push({ type: "flaky-hydration", description: route.path });
-          page.removeAllListeners();
-          problems = watchPage(page, ADMIN_URL);
-          await page.reload();
-          await page.waitForLoadState("networkidle");
-        }
         if (route.heading) {
           await expect(page.getByRole("heading", { name: route.heading, exact: true })).toBeVisible();
         } else {
