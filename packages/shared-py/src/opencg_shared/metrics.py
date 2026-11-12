@@ -14,6 +14,7 @@ The standard metric set (see the `observability` capability):
   opencg_ingestion_run_duration_seconds{connector}         histogram
   opencg_extractor_edges_total{relation,state}
   opencg_extractor_errors_total{reason}
+  opencg_auth_failures_total{service,reason}
 
 Multiprocess mode: when `PROMETHEUS_MULTIPROC_DIR` is set (the ingestion
 container sets it so one-shot CLI runs are counted), every process writes its
@@ -114,6 +115,12 @@ INGESTION_RUN_DURATION = Histogram(
     buckets=(1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600),
     registry=REGISTRY,
 )
+AUTH_FAILURES = Counter(
+    "opencg_auth_failures_total",
+    "Failed authentications by service and reason.",
+    labelnames=("service", "reason"),
+    registry=REGISTRY,
+)
 EXTRACTOR_EDGES = Counter(
     "opencg_extractor_edges_total",
     "Relationship edges emitted by extractors.",
@@ -148,6 +155,10 @@ def timed_stage(stage: str) -> Iterator[None]:
 
 def record_provider_error(provider: str | None, error_code: str | int) -> None:
     PROVIDER_ERRORS.labels(provider=provider or "n/a", error_code=str(error_code)).inc()
+
+
+def record_auth_failure(service: str, reason: str) -> None:
+    AUTH_FAILURES.labels(service=service, reason=reason).inc()
 
 
 def record_audit_write(log: str, outcome: str) -> None:

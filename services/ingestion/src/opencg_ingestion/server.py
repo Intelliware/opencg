@@ -16,8 +16,9 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from opencg_pipeline.providers import OllamaEmbeddings
+from opencg_pipeline.security import make_guard, principal_of
 from opencg_pipeline.storage.catalog import CatalogStore
 from opencg_shared import (
     ConnectorStatus,
@@ -27,6 +28,8 @@ from opencg_shared import (
     openCGConfig,
     setup_otel,
 )
+from opencg_shared.auth import Authenticator, settings_from_env, startup_checks
+from opencg_shared.authz import OpaClient, is_valid_classification
 from opencg_shared.otel import CORRELATION_HEADER, tag_request_span
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
@@ -49,6 +52,10 @@ _DEFERRED_REASONS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()
+    auth_settings = settings_from_env(
+        tenant=cfg.tenant, stub_principal=cfg.identity.principal, stub_roles=cfg.identity.roles
+    )
+    startup_checks(auth_settings)
     setup_otel(
         "opencg-ingestion",
         cfg.telemetry.service_namespace,
@@ -60,13 +67,27 @@ async def lifespan(app: FastAPI):
     app.state.cfg = cfg
     app.state.runs = runs
     app.state.catalog = catalog
+    app.state.authenticator = Authenticator(auth_settings)
+    app.state.opa = OpaClient()
+    app.state.audit_pool = catalog._require_pool()
     try:
         yield
     finally:
         await catalog.close()
+        await app.state.authenticator.close()
+        await app.state.opa.close()
 
 
-app = FastAPI(title="opencg-ingestion", lifespan=lifespan)
+# Every route except health and metrics is authenticated and authorized (design D9):
+# calling port 8100 directly cannot bypass policy.
+ROUTE_ACTIONS = {
+    ("GET", "/connectors"): "ingestion.read",
+    ("GET", "/runs/recent"): "ingestion.read",
+    ("POST", "/run/git"): "ingestion.run",
+}
+guard = make_guard("ingestion", ROUTE_ACTIONS)
+
+app = FastAPI(title="opencg-ingestion", lifespan=lifespan, dependencies=[Depends(guard)])
 app.router.routes.append(Route("/metrics", metrics_app))
 
 
@@ -128,12 +149,22 @@ async def connectors() -> list[ConnectorStatus]:
 
 class GitRunRequest(BaseModel):
     repo_url: str = Field(min_length=8)
+    classification: str = "internal"
 
 
 @app.post("/run/git", response_model=IngestionRun)
-async def run_git(req: GitRunRequest, bg: BackgroundTasks) -> IngestionRun:
+async def run_git(req: GitRunRequest, bg: BackgroundTasks, request: Request) -> IngestionRun:
     cfg: openCGConfig = app.state.cfg
     runs: RunStore = app.state.runs
+    if not is_valid_classification(req.classification):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_classification",
+                "message": "classification must be public, internal or confidential:<domain> "
+                "(domain: lowercase letters, digits and hyphens)",
+            },
+        )
     try:
         validate_repo_url(
             req.repo_url,
@@ -144,12 +175,19 @@ async def run_git(req: GitRunRequest, bg: BackgroundTasks) -> IngestionRun:
         raise HTTPException(
             status_code=422, detail={"code": "repo_url_rejected", "message": str(exc)}
         ) from exc
-    run = await runs.add(connector="git", repo=req.repo_url)
+    run = await runs.add(
+        connector="git",
+        repo=req.repo_url,
+        classification=req.classification,
+        requested_by=principal_of(request),
+    )
 
     async def task() -> None:
         try:
             await runs.update(run.run_id, status="running")
-            parents, chunks = await ingest_run(req.repo_url, cfg, run_id=run.run_id)
+            parents, chunks = await ingest_run(
+                req.repo_url, cfg, run_id=run.run_id, classification=req.classification
+            )
             await runs.update(
                 run.run_id,
                 status="succeeded",

@@ -4,8 +4,13 @@
 # (double underscore separates nesting levels).
 tenant: default
 
+# Auth is configured through the environment, not this file (see .env.example):
+#   OPENCG__ENVIRONMENT (dev|test|staging|production; unset = production),
+#   OPENCG__AUTH__MODE (none|oidc), OPENCG__AUTH__OIDC__* (issuer, internal URL,
+#   audience, claim paths), OPENCG__AUTH__API_KEYS_FILE (dev only),
+#   OPENCG__OPA__URL / OPENCG__OPA__TIMEOUT_MS (policy decisions, both modes).
 identity:
-  # v0 STUB. Replace with real auth before any non-dev deployment.
+  # Stub identity, used only in `none` auth mode (and as the actor there).
   principal: local-dev
   roles: [admin, reader]
 

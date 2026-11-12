@@ -4,8 +4,20 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Breaking
+
+- **Removed the shared-secret stopgaps** (`add-identity-and-opa`): the admin UI password gate (`OPENCG__ADMIN_UI__PASSWORD`, `/login`, `/api/auth/login`, `/api/auth/logout`) and the MCP server's built-in OAuth server (`OPENCG__MCP__OAUTH_PASSWORD`, `/authorize`, `/token`, `/register`, `/revoke`, `/.well-known/oauth-authorization-server`, `POST /oauth/approve`). Services **refuse to start** if either variable is set. See `docs/OPERATIONS.md` "Migrating from the stopgaps".
+- `OPENCG__MCP__HTTP_TOKEN` is accepted only when `OPENCG__ENVIRONMENT=dev`. An **unset `OPENCG__ENVIRONMENT` means `production`**; `.env.example` and compose set `dev`.
+- `none` auth mode refuses to start when `OPENCG__BIND_ADDRESS` is not a loopback address.
+- Retrieval entitlement moved from a role map in the pipeline to OPA. `confidential:<domain>` content now needs the `<domain>` role, and unknown classifications are denied.
+
 ### Added
 
+- **Real identity and policy** (`add-identity-and-opa`): `OPENCG__AUTH__MODE=oidc` validates access tokens from any OIDC issuer in every service; the MCP server is an OAuth protected resource; the admin UI signs in with authorization code + PKCE and keeps server-side sessions in Valkey. A bundled Keycloak (`26.8.1`) runs in the same compose project for local use, smoke, e2e and CI.
+- OPA (`1.21.4`) decides every retrieval candidate (one batched call, before the token budget) and every API action, in both auth modes, failing closed with `503 policy_unavailable`. Policies, data and tests live in `infra/opa/` (`make opa-test`, `make opa-revision`).
+- `opencg.access_audit_log` (append-only) records denials and allowed state-changing actions; retrieval audit rows record `auth_method` and each candidate's policy decision and revision. Apply `070_access_audit.sql` to an existing volume with `make db-apply`.
+- Ingestion runs take a `classification` (`--classification` on the CLI); runs record `requested_by`.
+- Dev-only named API keys (`make api-key`), `OPENCG__ENVIRONMENT`, and `opencg_auth_failures_total{service,reason}`.
 - **Optional observability stack** (`add-observability-stack`): Prometheus `v3.15.1`, Tempo `3.1.1` and Grafana `13.2.5` in a new opt-in compose overlay, `infra/compose/docker-compose.observability.yml`. It is **not** part of the default stack: start it with `make up-obs` (about 700 MB more RAM), stop it with `make down`. Grafana (port 3030, login required, no anonymous access) ships six provisioned dashboards: requests, pipeline stages, tokens and cost, ingestion, audit, and providers. See `docs/OPERATIONS.md` § Observability.
 - One connected trace per MCP tool call: the MCP server now exports OpenTelemetry spans (`mcp.<tool>`) and propagates `traceparent` to the pipeline, every span carries `correlation_id`, and each model call has its own `model.embed` / `model.chat` span.
 - `/metrics` on the ingestion service (multiprocess, so CLI runs count) and the MCP server, alongside the pipeline. New series for cost, unpriced tokens, audit writes and ingestion runs, documents, chunks and duration; stage latency, provider errors and error outcomes are now recorded.

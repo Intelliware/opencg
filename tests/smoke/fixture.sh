@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # CLI over the smoke fixture helpers, for callers outside run.sh (the admin UI
-# Playwright global setup). Set OPENCG_E2E=1 to include the e2e overlay.
+# Playwright global setup). Set OPENCG_E2E=1 to include the e2e overlay;
+# OPENCG_TEST_AUTH_MODE (default oidc) picks the auth overlay (see lib.sh).
 #
 #   tests/smoke/fixture.sh up                       # apply the overlay(s) to a running stack
-#   tests/smoke/fixture.sh restore                  # drop them again (ingestion back to .env settings)
+#   tests/smoke/fixture.sh restore                  # drop them again (services back to .env settings)
+#   tests/smoke/fixture.sh sql QUERY                # run a query in Postgres, print rows (tA, "|")
 #   tests/smoke/fixture.sh create RUN_ID [stub|cloud]
 #   tests/smoke/fixture.sh ingest RUN_ID [stub|cloud]
 #   tests/smoke/fixture.sh remove RUN_ID
@@ -14,7 +16,7 @@ set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 usage() {
-  sed -n '2,10p' "$0" >&2
+  sed -n '2,12p' "$0" >&2
   exit 2
 }
 
@@ -24,15 +26,27 @@ shift
 
 case "$command" in
   up)
-    services=(smoke-chat ingestion)
-    if [ "${OPENCG_E2E:-0}" = "1" ]; then services+=(admin-ui-gated); fi
-    "${COMPOSE[@]}" up -d --wait "${services[@]}"
+    "${COMPOSE[@]}" up -d --wait "${OVERLAY_SERVICES[@]}"
     exit 0
     ;;
   restore)
-    "${COMPOSE[@]}" rm -sf admin-ui-gated smoke-chat >/dev/null 2>&1 || true
-    docker compose -f "$ROOT/infra/compose/docker-compose.yml" --env-file "$ROOT/.env" \
-      --profile dev up -d --wait ingestion
+    "${COMPOSE[@]}" rm -sf smoke-chat >/dev/null 2>&1 || true
+    # Back to what .env says: drop the forced test mode, recreate the services
+    # whose settings the overlays changed, and stop the bundled Keycloak unless
+    # .env itself runs oidc.
+    env -u OPENCG__AUTH__MODE docker compose -f "$ROOT/infra/compose/docker-compose.yml" \
+      --env-file "$ROOT/.env" --profile dev up -d --wait pipeline ingestion mcp-server admin-ui
+    if [ "$(OPENCG__AUTH__MODE='' cfg OPENCG__AUTH__MODE none)" != "oidc" ]; then
+      docker compose -f "$ROOT/infra/compose/docker-compose.yml" --env-file "$ROOT/.env" \
+        --profile dev --profile idp rm -sf keycloak >/dev/null 2>&1 || true
+    fi
+    exit 0
+    ;;
+  sql)
+    [ $# -eq 1 ] || usage
+    "${COMPOSE[@]}" exec -T postgres \
+      sh -c 'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F "|" -c "$1"' sh "$1" \
+      | tr -d '\r'
     exit 0
     ;;
 esac

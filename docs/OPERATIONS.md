@@ -41,18 +41,103 @@ Each host port can be moved in `.env` to dodge a collision; the container ports 
 
 Ollama defaults to 11435 so it doesn't shadow a native Ollama app on 11434. The `curl` examples below use the default ports; substitute yours if you moved them. `make smoke` and `make e2e` read the same variables from `.env`.
 
-## Admin UI access gate
+## Authentication and access control
 
-By default the admin UI has no login. Every page shows an "Unauthenticated mode — local use only" banner, and the server logs a warning at startup. Set a shared password to require a sign-in:
+openCG has two auth modes, set once for every service with `OPENCG__AUTH__MODE`:
+
+| Mode | Who you are | When to use it |
+|---|---|---|
+| `none` (default) | Every request runs as the stub identity (`OPENCG__IDENTITY__PRINCIPAL` / `ROLES` / `OPENCG__TENANT`, default `local-dev` / `admin,reader` / `default`). The admin UI shows an "Unauthenticated mode" banner. | A single-user stack on your own machine. Services **refuse to start** in this mode if `OPENCG__BIND_ADDRESS` is not a loopback address. |
+| `oidc` | Every request except `/healthz`, `/readyz`, `/metrics` and the admin UI's sign-in routes needs an access token from one OpenID Connect issuer. Identity comes only from the token. | Anything shared, and every non-dev deployment. |
+
+Policy runs in **both** modes: OPA decides what each identity may see and do, so turning on OIDC changes who you are, not which rules apply.
+
+`OPENCG__ENVIRONMENT` (`dev`, `test`, `staging` or `production`) names the deployment. An **unset value means `production`**. `.env.example` and the compose stack set `dev`.
+
+### Using the bundled Keycloak
+
+The stack includes a Keycloak service so you can run OIDC without your own IdP. It runs in the same compose project, keeps its data in its own `keycloak` database on the stack's Postgres, and is only started in `oidc` mode. In `.env`:
 
 ```bash
-# .env
-OPENCG__ADMIN_UI__PASSWORD=<a long random password>
+OPENCG__AUTH__MODE=oidc
+OPENCG__AUTH__OIDC__ISSUER=http://localhost:8380/realms/opencg
+OPENCG__AUTH__OIDC__INTERNAL_URL=http://keycloak:8080/realms/opencg
+OPENCG__ADMIN_UI__PUBLIC_URL=http://localhost:3000   # match OPENCG__ADMIN_UI__HOST_PORT
 ```
 
-Restart the admin UI (`make up-d` recreates it). Every page and `/api/proxy/**` route then needs a session: pages redirect to `/login`, and API calls get `401`. `/login`, `/api/auth/*`, `/api/healthz` and static files stay open. Sessions last 12 hours, and changing the password signs everyone out. A sign-out button appears in the sidebar.
+Then `make up-d` (it adds the `idp` profile itself). Keycloak is at <http://localhost:8380> (admin console user `admin`, password `OPENCG__KEYCLOAK__ADMIN_PASSWORD`).
 
-This is a stopgap (`REPLACE-BEFORE-PROD`): one shared password, no per-user accounts. Put TLS in front of it (a reverse proxy) before using it over a network; the session cookie is marked `Secure` when the request, or the proxy's `x-forwarded-proto`, is HTTPS.
+- **Realm `opencg`:** roles `admin`, `reader`, `legal`; the admin UI client `opencg-admin-ui`; service accounts `opencg-smoke` (admin, reader), `opencg-smoke-reader` (reader) and `opencg-smoke-legal` (reader, legal) for smoke, e2e and scripts.
+- **Dev users** `alice` (admin, reader), `bob` (reader) and `carol` (reader, legal) are imported **only** when `OPENCG__ENVIRONMENT` is `dev` or `test`. In `staging`/`production` the realm has no users and the smoke clients are disabled.
+- **Secrets:** every password and client secret comes from `.env`. The `dev-only-…` values in `.env.example` are public; change all of them before Keycloak is reachable from any network. Keycloak reads them at the first realm import, so changing them later needs `make down-v` or the Keycloak console.
+- **Why two URLs:** browsers reach Keycloak at the public issuer (`localhost:8380`), containers at `keycloak:8080`. Tokens always carry the public issuer; `INTERNAL_URL` is only where services fetch discovery and keys.
+- **Existing Postgres volume:** the `keycloak` database is created with a new volume. On an existing one, run `make db-apply SQL=015_keycloak_db.sh` once.
+
+### Connecting your own IdP (Entra ID, Okta, Auth0, Keycloak)
+
+Set the public issuer and leave `INTERNAL_URL` unset:
+
+```bash
+OPENCG__AUTH__MODE=oidc
+OPENCG__AUTH__OIDC__ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+OPENCG__AUTH__OIDC__AUDIENCE=opencg            # the `aud` your IdP puts in access tokens
+OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM=preferred_username   # falls back to `sub`
+OPENCG__AUTH__OIDC__ROLES_CLAIM=roles          # dotted path: realm_access.roles, groups, ...
+OPENCG__AUTH__OIDC__TENANT_CLAIM=              # empty = OPENCG__TENANT
+OPENCG__ADMIN_UI__OIDC__CLIENT_ID=<admin UI client id>
+OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET=<secret>
+OPENCG__ADMIN_UI__PUBLIC_URL=https://opencg-admin.example.com
+OPENCG__MCP__PUBLIC_URL=https://opencg-mcp.example.com
+```
+
+Register with the IdP:
+
+1. **An API / resource with audience `opencg`.** Access tokens must carry it in `aud`, be signed with RS256 or ES256, and include the roles claim you configured. Role values must match the policy data (`admin`, `reader`, and one per confidential domain, e.g. `legal`).
+2. **The admin UI** as a confidential web client: authorization code with PKCE, redirect URI `${OPENCG__ADMIN_UI__PUBLIC_URL}/api/auth/callback`, post-logout redirect `${OPENCG__ADMIN_UI__PUBLIC_URL}/`, refresh tokens on.
+3. **MCP clients.** The MCP server publishes `/.well-known/oauth-protected-resource`, which points OAuth clients (claude.ai, Claude Code) at your issuer. With an IdP that supports dynamic client registration (Keycloak, Okta, Auth0), clients register themselves. **Entra ID does not**, so pre-register one app registration per MCP client and enter its client ID in the client:
+   - In Entra ID, create an app registration (public client for Claude Code / Cursor; web for claude.ai with its documented redirect URI), add the API permission for the `opencg` API, and assign app roles `reader`/`admin` to users or groups.
+   - Set `OPENCG__AUTH__OIDC__ROLES_CLAIM=roles` (Entra puts app roles there).
+   - In the client, add the MCP server URL `${OPENCG__MCP__PUBLIC_URL}/mcp` and supply the client ID when asked.
+4. **Scripts and services** use the client-credentials grant and send `Authorization: Bearer <token>`.
+
+Services fetch the issuer's keys from its discovery document, cache them, and refetch at most every 30 s when a token names an unknown key, so key rotation needs no restart. Failed authentications return `401` with `token_missing`, `token_expired`, `token_invalid`, `issuer_unreachable` or `api_key_disabled`, and count in `opencg_auth_failures_total{service,reason}`. Tokens are never logged.
+
+### API keys (dev only)
+
+For tools that cannot do OAuth, named API keys work **only when `OPENCG__ENVIRONMENT=dev`**, in either mode:
+
+```bash
+make api-key NAME=my-script ROLES=reader        # prints the key once, and its file entry
+```
+
+Put the printed entry in a JSON list in a file and point `OPENCG__AUTH__API_KEYS_FILE` at it. Only the key's SHA-256 is stored. Clients send `Authorization: Bearer ock_…`; requests are audited with `auth_method = "api_key"` and go through the same policy as any other principal. Outside `dev`, a configured key file, or `OPENCG__MCP__HTTP_TOKEN` (now a legacy dev-only key), stops every service from starting, and an `ock_` bearer gets `401 api_key_disabled`.
+
+### Policy (OPA)
+
+The `opa` service evaluates two packages from `infra/opa/` (mounted read-only):
+
+- `opencg.entitlement`: one decision per retrieval candidate. `public` and `internal` need `reader` or `admin`; `confidential:<domain>` needs the role `<domain>` and the domain must be listed in `confidential_domains` in `infra/opa/data/opencg.json`; anything else is denied as `unknown_classification`. Denied candidates are removed before the token budget.
+- `opencg.admin`: one decision per API action (`retrieve`, `search.vector`, `audit.read`, `entity.read`, `entity.tombstone`, `graph.read`, `graph.write`, `vocab.write`, `ingestion.read`, `ingestion.run`). `reader` gets `retrieve`, `search.vector` and every `*.read`; `admin` gets everything; unknown actions are denied.
+
+To change the rules, edit `infra/opa/policies/*.rego` or `infra/opa/data/opencg.json`, run `make opa-revision` (the revision is a hash of the policy and data files and is written into every audit decision), then `make opa-test`, and restart `opa`. If OPA is down, slow (`OPENCG__OPA__TIMEOUT_MS`, default 2000) or returns a partial answer, requests are **denied**: `/retrieve` returns `503 policy_unavailable` and still writes an `outcome = "error"` audit row.
+
+To label content, ingest with a classification: `opencg-ingest git <url> --classification confidential:legal` (CLI) or `{"repo_url": …, "classification": "confidential:legal"}` on `POST /run/git` (admin UI "Run now").
+
+### Access audit log
+
+`opencg.access_audit_log` records every **denied** request and every **allowed state-changing** action (`entity.tombstone`, `graph.write`, `vocab.write`, `ingestion.run`) with the principal, roles, auth method, action, resource, decision, reason and policy revision. Graph and tombstone rows are written in the same transaction as the change. Reads and failed authentications are not recorded there (they are in `audit_log` and the metrics). Like the other audit tables it is append-only: `UPDATE`, `DELETE` and `TRUNCATE` raise errors. On an existing volume, create it with `make db-apply SQL=070_access_audit.sql`; the pipeline's `/readyz` reports it missing until then.
+
+### Migrating from the stopgaps
+
+The shared-password admin UI gate and the MCP OAuth stopgap are **removed**. A service refuses to start if `OPENCG__ADMIN_UI__PASSWORD` or `OPENCG__MCP__OAUTH_PASSWORD` is set, so no deployment silently becomes open.
+
+1. Remove both variables from `.env`. Keep `OPENCG__AUTH__MODE=none` on loopback-only stacks if that is all you need (`OPENCG__MCP__HTTP_TOKEN` still works there, in `dev` only).
+2. Apply the new tables on an existing volume: `make db-apply SQL=070_access_audit.sql` (and `SQL=015_keycloak_db.sh` for the bundled Keycloak).
+3. Register openCG with your IdP (above), set `OPENCG__AUTH__MODE=oidc` and the issuer, audience, claim and admin UI client variables, and `make up-d`.
+4. Reconnect MCP clients: they discover the IdP from the protected-resource metadata. Remove and re-add claude.ai custom connectors.
+5. Adjust `infra/opa/data/opencg.json` to your roles and confidential domains, then `make opa-revision && make opa-test`.
+
+Rollback: `OPENCG__AUTH__MODE=none` on a loopback-only stack. The new tables and audit columns are additive.
 
 ## Configuration
 
@@ -196,7 +281,7 @@ Tempo and Grafana (see [Observability](#observability)).
 The default stack (`make up-d`) runs only what a real deployment needs. Test wiring lives in two compose overlays that the test commands apply for you:
 
 - `infra/compose/docker-compose.smoke.yml` (`make smoke`, `make smoke-cloud`, `make e2e`) adds the deterministic `smoke-chat` stub, mounts the committed fixture into ingestion, and allows local repository paths under `/tmp`.
-- `infra/compose/docker-compose.e2e.yml` (`make e2e` only) points ingestion's extraction at `smoke-chat`, so a "Run now" from the UI never calls a provider, and starts `admin-ui-gated`, a second admin UI with the access gate on.
+- `infra/compose/docker-compose.e2e.yml` (`make e2e` only) points ingestion's extraction at `smoke-chat`, so a "Run now" from the UI never calls a provider. `OPENCG_TEST_AUTH_MODE` picks the auth mode for `make smoke`, `make smoke-obs` and `make e2e`: `oidc` (the default) adds `infra/compose/docker-compose.oidc.yml` and the `idp` profile, so every service runs in `oidc` mode against the bundled Keycloak and the auth stages run; `none` is the faster path and prints each auth stage it skips.
 
 A third overlay, `infra/compose/docker-compose.observability.yml`, is not a test overlay: it is the optional Prometheus, Tempo and Grafana stack, applied by `make up-obs` and `make smoke-obs` only (see [Observability](#observability)).
 
@@ -254,10 +339,6 @@ make ingest-git REPO=<your repo>
 ```
 
 In-place swap (preserves catalog rows but rebuilds vector points) is not yet supported; a `model-providers` follow-up change adds a re-embed CLI.
-
-## Identity stub
-
-v0 hardcodes an identity context from `.env`. Anything calling the MCP server gets the configured `principal` + `roles` + `tenant` attached. The pipeline propagates these to OPA (when it lands in the follow-up) and into every audit row. **Replace with real auth before any non-dev deployment** — the propagation contract is already in place so only the verifier needs to change.
 
 ## Observability
 

@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from authfakes import guarded_app
 from fastapi.testclient import TestClient
 from opencg_pipeline import admin_routes
 from opencg_pipeline.providers import EmbeddingResult
@@ -54,7 +54,7 @@ class FakeCatalog:
     async def get_entity_with_lineage(self, *, tenant: str, entity_id: str):
         return self.get_result
 
-    async def tombstone(self, *, tenant: str, entity_id: str):
+    async def tombstone(self, *, tenant: str, entity_id: str, on_conn=None):
         return self.tombstone_result
 
     async def live_entity_ids(self, *, tenant: str, entity_ids: list[str]) -> set[str]:
@@ -114,7 +114,7 @@ def _mount(
     ingestion_client: httpx.AsyncClient | None = None,
     audit: FakeAudit | None = None,
 ) -> TestClient:
-    app = FastAPI()
+    app = guarded_app()
     app.include_router(admin_routes.router)
     app.state.cfg = openCGConfig()
     app.state.tracer = FakeTracer()

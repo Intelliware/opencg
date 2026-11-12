@@ -15,17 +15,3 @@ services:
       OPENCG__PROVIDERS__CHAT__PROVIDER: ollama
       OPENCG__PROVIDERS__CHAT__MODEL: smoke-chat
       OPENCG__PROVIDERS__CHAT__API_KEY: ""
-
-  # A second admin UI that always has the access gate on, so auth.spec.ts can
-  # cover both modes in one run. The password is a test fixture, not a secret;
-  # the port is loopback-only by default like every other one.
-  admin-ui-gated:
-    image: opencg/admin-ui:local
-    env_file: ../../.env
-    environment:
-      OPENCG__ADMIN_UI__PASSWORD: ${OPENCG__E2E__GATE_PASSWORD:-e2e-gate-password}
-    depends_on:
-      pipeline: { condition: service_healthy }
-    ports:
-      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__ADMIN_UI_GATED__HOST_PORT:-3001}:3000"
-    profiles: [dev]

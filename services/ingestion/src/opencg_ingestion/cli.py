@@ -7,6 +7,7 @@ from datetime import datetime
 
 import click
 from opencg_shared import load_config
+from opencg_shared.authz import is_valid_classification
 
 from opencg_ingestion.pipeline_runner import run_sync
 from opencg_ingestion.reextract import reextract_sync
@@ -32,14 +33,30 @@ def main() -> None:
     default=None,
     help="Stop after this many chunks across all documents.",
 )
-def git(repo_url: str, max_documents: int | None, max_chunks: int | None) -> None:
+@click.option(
+    "--classification",
+    default="internal",
+    show_default=True,
+    help="Classification for every entity the run creates: public, internal or "
+    "confidential:<domain>.",
+)
+def git(
+    repo_url: str, max_documents: int | None, max_chunks: int | None, classification: str
+) -> None:
     """Ingest a public git repository (clone, walk, embed)."""
+    if not is_valid_classification(classification):
+        raise click.BadParameter(
+            "must be public, internal or confidential:<domain> "
+            "(domain: lowercase letters, digits and hyphens)",
+            param_hint="--classification",
+        )
     cfg = load_config()
     summary = run_sync(
         repo_url,
         cfg,
         max_documents=max_documents,
         max_chunks=max_chunks,
+        classification=classification,
     )
     limits = []
     if summary.document_limit is not None:

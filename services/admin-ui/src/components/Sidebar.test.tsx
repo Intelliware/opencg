@@ -14,12 +14,17 @@ describe("Sidebar", () => {
     expect(labels[1]).toBe("Graph");
   });
 
-  it("shows a sign-out control only when the access gate is enabled", () => {
-    const { unmount } = render(<Sidebar />);
+  it("shows no user and no sign-out in none mode", () => {
+    render(<Sidebar />);
     expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
-    unmount();
-    render(<Sidebar signOut />);
+    expect(screen.queryByLabelText(/Signed in as/)).toBeNull();
+  });
+
+  it("shows the signed-in principal and a sign-out form in oidc mode", () => {
+    render(<Sidebar user={{ principal: "alice", roles: ["admin"] }} />);
+    expect(screen.getByLabelText("Signed in as alice")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Sign out" });
-    expect(button.closest("form")).toHaveAttribute("action", "/api/auth/logout");
+    expect(button.closest("form")).toHaveAttribute("action", "/api/auth/signout");
+    expect(button.closest("form")).toHaveAttribute("method", "post");
   });
 });

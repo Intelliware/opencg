@@ -8,7 +8,7 @@ What runs today (`main` after v0.1.0):
 | MCP stdio | None (local process) | Stub | None |
 | Pipeline `:8000` | None | `/retrieve` trusts `identity` in the body; graph writes use `cfg.identity.principal` as `actor` | `assemble.py` maps roles to classifications in code |
 | Ingestion `:8100` | None | None | None |
-| Admin UI `:3000` | Optional shared password, HMAC cookie (`lib/session.ts`, `middleware.ts`) | None (server calls to the pipeline carry no identity) | None |
+| Admin UI `:3000` | Optional shared password, HMAC cookie (`lib/session.ts`, `src/proxy.ts`) | None (server calls to the pipeline carry no identity) | None |
 
 Every published port binds to `127.0.0.1` by default, which is what makes the current state acceptable for local use. Entities are all ingested as `internal`. `opencg.audit_log` already has `principal`, `roles` and a JSONB `candidate_decisions` column, and its trigger blocks every update except setting `legal_hold`.
 
@@ -59,7 +59,7 @@ Startup checks (each service refuses to start, with a message naming the variabl
 Some MCP clients and scripts cannot do OAuth. The owner's rule: API keys may authenticate only when the environment is `dev`.
 
 - `OPENCG__ENVIRONMENT` is one of `dev`, `test`, `staging`, `production`. Unset means `production`, so a forgotten setting fails safe. `.env.example` sets `dev`. CI sets `test`.
-- `auth.api_keys` in `opencg.yaml` (or `OPENCG__AUTH__API_KEYS_FILE`) lists `{name, key_sha256, principal, roles}`. Only the SHA-256 of a key is stored. `make api-key NAME=… ROLES=…` prints a new random key once, together with the entry to paste. Keys are sent as `Authorization: Bearer ock_<key>`. The `ock_` prefix tells a key from a JWT without parsing it.
+- `OPENCG__AUTH__API_KEYS_FILE` names a JSON file listing `{name, key_sha256, principal, roles}` (a file rather than `opencg.yaml`, so the MCP server, which does not read `opencg.yaml`, uses the same source). `key_sha256` is the lowercase hex SHA-256 of the whole key, `ock_` prefix included. Only the SHA-256 of a key is stored. `make api-key NAME=… ROLES=…` prints a new random key once, together with the entry to paste. Keys are sent as `Authorization: Bearer ock_<key>`. The `ock_` prefix tells a key from a JWT without parsing it.
 - In `dev`, a valid key authenticates in **both** modes, with the entry's principal and roles, and is audited as `auth_method = "api_key"`. OPA applies the same rules as for any other principal. Comparison is constant-time on the hash.
 - In any other environment, a configured key list or `OPENCG__MCP__HTTP_TOKEN` stops every service from starting, naming the setting. A request carrying an `ock_` key gets `401` with reason `api_key_disabled`.
 - `OPENCG__MCP__HTTP_TOKEN` becomes a legacy single key: in `dev` it is accepted as the key `mcp-http-token` with the stub identity, so existing local setups keep working.
@@ -130,6 +130,8 @@ All tokens carry audience `opencg`: openCG's components are one protected resour
 Forwarding keeps one trust anchor (the IdP's keys) and lets each service check identity independently. The cost is that each service fetches and caches the JWKS, which a shared verifier makes cheap (D6).
 
 ### D6. One verifier per language, one claim mapping
+
+**Python JWT library (task 1.1): `PyJWT[crypto]` 2.15.1.** It covers RS256/ES256 verification, `PyJWK` key objects and leeway in one small, widely used package; `joserfc` is newer with a smaller install base. JWKS discovery and caching are a few lines of our own code on `httpx`, which the services already use.
 
 `packages/shared-py` gains `opencg_shared.auth`: config, a JWKS-caching token verifier, and a FastAPI dependency returning `IdentityContext`. The MCP server uses `jose` (`createRemoteJWKSet`, `jwtVerify`) and the admin UI uses `openid-client`. All three read the same variables:
 
@@ -206,7 +208,7 @@ There is no migration tool: init scripts run only when the Postgres volume is cr
 
 - `/api/auth/signin` starts authorization code + PKCE with `state` and `nonce`; `/api/auth/callback` exchanges the code server-side through the internal URL; `/api/auth/signout` clears the session and redirects to the IdP's end-session endpoint.
 - The session lives in **Valkey** (already in the stack for "cache + session"), keyed by a random ID in an HttpOnly, SameSite=Lax cookie (Secure over HTTPS, as today). It holds the tokens and their expiry and is refreshed with the refresh token shortly before the access token expires. Tokens never reach the browser.
-- `middleware.ts` runs in the Node.js runtime (stable in Next 15.5) so it can read Valkey. Unauthenticated page requests redirect to sign-in with a same-origin `next`; `/api/**` gets `401`. `/api/auth/*`, `/api/healthz` and `public/` stay open.
+- `src/proxy.ts` runs in the Node.js runtime (stable in Next 15.5) so it can read Valkey. Unauthenticated page requests redirect to sign-in with a same-origin `next`; `/api/**` gets `401`. `/api/auth/*`, `/api/healthz` and `public/` stay open.
 - `lib/api.ts` attaches the session's access token to every pipeline call. A `403` from the pipeline renders a "You don't have permission" state instead of an error boundary.
 - The sidebar shows the signed-in principal and a sign-out button. In `none` mode none of this runs and the banner stays.
 
@@ -225,12 +227,61 @@ Steps for an operator moving from the gate to OIDC are in the Migration Plan bel
 
 ### D13. Testing without an external IdP
 
-- **Unit:** Python verifier against locally generated keys (expired, wrong issuer, wrong audience, `alg=none`, unknown `kid`); TS verifier likewise; `respx`-mocked OPA for the entitle stage and the admin dependency; fake `_Pool` for the access audit writer; middleware tests for the admin UI.
+- **Unit:** Python verifier against locally generated keys (expired, wrong issuer, wrong audience, `alg=none`, unknown `kid`); TS verifier likewise; `respx`-mocked OPA for the entitle stage and the admin dependency; fake `_Pool` for the access audit writer; proxy tests for the admin UI.
 - **Policy:** `opa test infra/opa/policies infra/opa/data` runs through the pinned OPA image in CI's `static` job (no new host prerequisite) and as `make opa-test`.
 - **Test auth mode.** `make smoke` and `make e2e` read `OPENCG_TEST_AUTH_MODE` (default `oidc`). In `oidc` the smoke and e2e overlays enable the `idp` profile and set `OPENCG__AUTH__MODE=oidc` on every openCG service. `OPENCG_TEST_AUTH_MODE=none` keeps today's lighter path for quick local runs and prints which auth checks it skipped.
 - **Smoke:** fetches a token for `opencg-smoke` with the client-credentials grant and sends it on every call. New stages check `401` without a token, the MCP protected-resource metadata, an MCP `tools/call` with a token, a `confidential:legal` fixture copy that is denied to the service account and allowed to `carol` (password grant is disabled, so the smoke uses a second service account `opencg-smoke-legal` with role `legal`), and an `access_audit_log` row for a denied tombstone by a reader-only account (`opencg-smoke-reader`).
 - **E2E:** global setup signs in through the Keycloak login page as `alice` (admin) and `bob` (reader) and saves two storage states. `auth.spec.ts` covers redirect to the IdP, sign-in, reader denial of a tombstone, and sign-out. The `admin-ui-gated` instance and its port 3001 are removed from the e2e overlay. API calls from tests use the service account's token.
 - **CI:** the `stack` job uses the overlays, so every PR to `main` runs the real OIDC and OPA path. The Keycloak image is cached like the other images.
+
+**As implemented (phases 9 to 11).**
+
+- The auth part of the overlays is its own file, `infra/compose/docker-compose.oidc.yml`: `OPENCG__AUTH__MODE=oidc`, the bundled issuer (`${OPENCG__KEYCLOAK__PUBLIC_URL}/realms/opencg`) and the internal URL `http://keycloak:8080/realms/opencg` on pipeline, ingestion, MCP server and admin UI, each also waiting for a healthy `keycloak`. `tests/smoke/lib.sh` adds it and `--profile idp` when `OPENCG_TEST_AUTH_MODE=oidc`; in `none` it exports `OPENCG__AUTH__MODE=none`, so a `.env` in `oidc` mode cannot leak into the open run. Applying the overlays now brings up every service they touch (`smoke-chat pipeline ingestion mcp-server admin-ui`, plus `keycloak`), not only ingestion. `tests/smoke/fixture.sh restore` (e2e teardown) puts those services back to the `.env` settings and removes Keycloak unless `.env` itself is in `oidc` mode; the `none` smoke also removes a Keycloak an earlier run left, proving it needs none.
+- Tokens: the client-credentials grant against the host-published Keycloak port. Each token is written to a mode-600 curl header file (`curl -H @file`), so it never appears on a command line or in output, and is refetched after 200 s (the realm issues 300 s tokens; `make smoke-obs` runs longer than that).
+- The `confidential:legal` copy is a second fixture copy (`<run>-legal`) with an extra README line carrying a run-unique word, ingested with `--classification confidential:legal`. The lexical leg of hybrid retrieval finds it by that word, so it is among the candidates whatever older runs left in the catalogue. `/search/vector` is checked with a `source_uri` filter on the copy's README (Qdrant payloads carry the document URI, not the chunk's).
+- The reader tombstone and the e2e reader denial target entities no other check tombstones (a second current-run chunk in smoke, a document in e2e). The OPA reason for a reader is `insufficient_role`.
+- E2E reads `access_audit_log` and `graph_audit_log` through `tests/smoke/fixture.sh sql` (no API exposes them). Alice's attributed action is a vocabulary add + deprecate: `graph_audit_log.actor = alice` and an `access_audit_log` `vocab.write` allow row for `alice`. The sign-in, wrong-password and sign-out tests use their own empty storage state, so signing out never ends the session the other specs share.
+- CI saves the pulled Keycloak and OPA images as one tarball in the Actions cache, keyed by their pinned tags (the `stack` job saves it; `observability` restores it read-only, as it does the Ollama models), and uploads `opa-logs.txt` and `keycloak-logs.txt` on failure. `actionlint` 1.7.7 passes.
+
+**Recorded runs (2026-11-12, local Docker Desktop, warm images, Keycloak database already imported).** From `make up-d` with the default `.env` (10 containers, no Keycloak):
+
+| Run | Result | Duration |
+|---|---|---|
+| `make smoke` (`oidc`, starts Keycloak and recreates the services) | pass | 36 s wall, 35 s smoke (idp stage 8 s) |
+| `make e2e` (`oidc`) | 23 passed, 1 skipped (banner test) | 41 s wall, 40.4 s Playwright |
+| `OPENCG_TEST_AUTH_MODE=none make smoke` | pass, 8 auth stages listed as skipped | 11 s wall, 10 s smoke |
+| `OPENCG_TEST_AUTH_MODE=none make e2e` | 19 passed, 5 skipped (OIDC tests) | 28 s wall, 26.3 s Playwright |
+| `make smoke-obs` (`oidc`) | pass | 78 s |
+
+### D14. Implementation notes: OPA, Keycloak, database (phases 2, 3, 8)
+
+Recorded during implementation; each was checked against running containers.
+
+**Pinned images.** Both tags were at least two weeks old on 2026-11-12. Newer tags existed but were too recent.
+
+| Image | Tag | Pushed | Notes |
+|---|---|---|---|
+| `openpolicyagent/opa` | `1.21.4` | 2026-10-23 (Docker Hub) | Distroless, no shell or curl. The healthcheck runs `/opa eval --fail 'http.send({…/health…}).status_code == 200'`. `make opa-test` uses the same tag. |
+| `quay.io/keycloak/keycloak` | `26.8.1-1` | 2026-10-23 (quay.io) | The `-N` suffix is the immutable rebuild tag; `26.8.1` itself was re-pushed on 2026-10-31. No curl. The healthcheck sends HTTP over bash `/dev/tcp` to `:9000/health/ready`. |
+
+**OPA layout.** The policies are `policies/common.rego` (shared helpers), `entitlement.rego` and `admin.rego`. `data/opencg.json` sits at the data root: `meta.revision`, `classifications` (classification → roles), `confidential_domains` (`["legal"]`) and `actions` (action → roles). The roles the policy knows are every role named in that file; a principal with none of them gets `no_role`. The pipeline reads `result` from:
+
+- `POST /v1/data/opencg/entitlement/decisions` → `{"decisions": {"<entity_id>": {"allow", "reason"}}, "package": "opencg.entitlement", "revision"}`. Reasons are checked in this order: `unknown_classification`, `no_role`, `allowed`, `classification_restricted`. `confidential:<domain>` counts as known only when `<domain>` is listed in `confidential_domains`, so `confidential:hr` is denied as `unknown_classification` until an operator adds `hr`. A typo never widens access.
+- `POST /v1/data/opencg/admin/decision` → `{"allow", "reason", "package": "opencg.admin", "revision"}`. Reasons are checked in this order: `unknown_action`, `no_role`, `allowed`, `insufficient_role`.
+
+**Revision.** `infra/opa/revision.py` (standard library only) hashes `policies/*.rego` except `*_test.rego`, plus `data/*.json` serialised canonically with `meta.revision` removed. Each file contributes `path NUL content NUL`, in path order. Test-only edits do not change the revision. `make opa-test` runs `opa check --strict`, `opa fmt --list --fail`, `opa test` and `revision.py --check`.
+
+**Keycloak dev users.** `infra/keycloak/entrypoint.sh` wraps `kc.sh` and copies the committed files into `/opt/keycloak/data/import` under the names Keycloak's directory import expects: `realm-opencg.json` → `opencg-realm.json` always, and `realm-opencg-dev-users.json` → `opencg-users-0.json` only when `OPENCG__ENVIRONMENT` is `dev` or `test`. It then runs `start-dev --import-realm` (dev/test) or `start --import-realm` (staging/production, with `KC_PROXY_HEADERS=xforwarded`). `start --optimized` needs an image pre-built with `kc.sh build`. The plain `start` used here does that build at startup, which costs a few seconds. An operator who wants `--optimized` builds a derived image. In staging and production the smoke clients are imported disabled (`"enabled": "${OPENCG_KEYCLOAK_TEST_CLIENTS_ENABLED}"`, set by the wrapper) with random secrets. The wrapper refuses to start when a required secret is unset. Import runs once per Keycloak database (strategy `IGNORE_EXISTING`), so changing the environment later does not add or remove users.
+
+**Keycloak realm.** If a realm file declares `clientScopes`, Keycloak creates none of its built-in scopes. The file therefore carries the standard OIDC built-ins (`basic`, `profile`, `email`, `roles`, `web-origins`, `acr`, `service_account`, `offline_access`, `address`, `phone`, `organization`, exported from 26.8.1) plus `opencg`. `opencg` is a realm default scope: an audience mapper (`opencg`), a realm-role mapper to a flat `roles` claim, and role scope mappings for `admin`, `reader` and `legal`. Every client has `fullScopeAllowed: false`, and dynamically registered clients get "Full Scope Disabled", so `roles` contains only those three roles (no `default-roles-opencg`, `offline_access`, …). With a single audience, `aud` is the string `"opencg"`, not an array.
+
+**Dynamic client registration.** Keycloak sees requests that reach it through a published port as coming from the Docker gateway (for example `172.21.0.1`), not `127.0.0.1`, so "request must come from a trusted host" rejects every host-side MCP client. The Trusted Hosts policy therefore checks only the client's URIs (`client-uris-must-match`: redirect URIs on `localhost`, `127.0.0.1` or `host.docker.internal`). The network boundary is the loopback-only port binding. The other default anonymous policies (consent required, full scope disabled, max 200 clients, allowed scopes and mappers) are declared explicitly.
+
+**Admin UI redirect.** Keycloak accepts a wildcard only at the end of a redirect URI, so `http://localhost:*/api/auth/callback` is impossible. The redirect URI is `${OPENCG__ADMIN_UI__PUBLIC_URL}/api/auth/callback`, and compose defaults the public URL to `http://localhost:${OPENCG__ADMIN_UI__HOST_PORT:-3000}`. The post-logout URIs are `${PUBLIC_URL}/` and `${PUBLIC_URL}/*`.
+
+**Database.** `015_keycloak_db.sh` runs as the superuser. It creates the `keycloak` role and database, or resets the role's password, from `OPENCG__KEYCLOAK__DB_PASSWORD`, and skips with a notice when that variable is unset. It grants nothing on the `opencg` schema. Like every database, `opencg` keeps Postgres' default `CONNECT` for `PUBLIC`. `070_access_audit.sql` also forbids `TRUNCATE`, which row triggers do not cover. `make db-apply SQL=<file>` pipes a `.sql` file to `psql` or a `.sh` file to `bash` in the `postgres` container.
+
+**Makefile profiles.** `up`, `up-d`, `up-obs`, `e2e`, `e2e-ui` and `ci-stack` add `--profile idp` when `OPENCG__AUTH__MODE=oidc` (shell first, then `.env`) and the issuer is unset or points at `//localhost:<keycloak port>/`, `//127.0.0.1:<keycloak port>/` or `//keycloak:`. `down` and `down-v` always pass both profiles.
 
 ## Risks / Trade-offs
 

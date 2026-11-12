@@ -1,55 +1,95 @@
 // @vitest-environment node
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SESSION_COOKIE, issueSession } from "@/lib/session";
+import { SESSION_COOKIE, createSession } from "@/lib/auth/session";
+import { MemoryStore, setSessionStoreForTests } from "@/lib/auth/store";
 import { proxy } from "./proxy";
+
+vi.mock("@/lib/auth/oidc", () => ({
+  refreshTokens: vi.fn(async () => {
+    throw new Error("revoked");
+  }),
+}));
 
 const req = (path: string, cookie?: string) =>
   new NextRequest(new URL(path, "http://localhost:3000"), {
     headers: cookie ? { cookie: `${SESSION_COOKIE}=${cookie}` } : {},
   });
 
-afterEach(() => vi.unstubAllEnvs());
+const passedThrough = (res: Response) => res.headers.get("x-middleware-next") === "1";
 
-describe("admin access gate proxy", () => {
-  it("passes everything through when no password is configured", async () => {
-    vi.stubEnv("OPENCG__ADMIN_UI__PASSWORD", "");
-    const res = await proxy(req("/api/proxy/entities/abc"));
-    expect(res.headers.get("x-middleware-next")).toBe("1");
+beforeEach(() => setSessionStoreForTests(new MemoryStore()));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  setSessionStoreForTests(undefined);
+});
+
+describe("admin UI proxy in none mode", () => {
+  it("passes every request through", async () => {
+    vi.stubEnv("OPENCG__AUTH__MODE", "");
+    expect(passedThrough(await proxy(req("/api/proxy/entities/abc")))).toBe(true);
+    expect(passedThrough(await proxy(req("/graph")))).toBe(true);
+  });
+});
+
+describe("admin UI proxy in oidc mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("OPENCG__AUTH__MODE", "oidc");
+    vi.stubEnv("OPENCG__ADMIN_UI__PUBLIC_URL", "http://localhost:3300");
   });
 
-  it("blocks an unauthenticated proxy call with 401", async () => {
-    vi.stubEnv("OPENCG__ADMIN_UI__PASSWORD", "pw");
+  it("answers an unauthenticated /api/** call with 401 JSON", async () => {
     const res = await proxy(req("/api/proxy/entities/abc"));
     expect(res.status).toBe(401);
-    expect(res.headers.get("x-middleware-next")).toBeNull();
+    expect(passedThrough(res)).toBe(false);
+    expect(await res.json()).toMatchObject({ error: "signin_required" });
   });
 
-  it("redirects an unauthenticated page view to /login with next", async () => {
-    vi.stubEnv("OPENCG__ADMIN_UI__PASSWORD", "pw");
+  it("redirects an unauthenticated page view to sign-in with next", async () => {
     const res = await proxy(req("/graph?tab=map"));
     expect(res.status).toBe(307);
     const location = new URL(res.headers.get("location")!);
-    expect(location.pathname).toBe("/login");
+    expect(location.origin).toBe("http://localhost:3300");
+    expect(location.pathname).toBe("/api/auth/signin");
     expect(location.searchParams.get("next")).toBe("/graph?tab=map");
   });
 
-  it("lets a valid session through", async () => {
-    vi.stubEnv("OPENCG__ADMIN_UI__PASSWORD", "pw");
-    const res = await proxy(req("/api/proxy/entities/abc", await issueSession("pw")));
-    expect(res.headers.get("x-middleware-next")).toBe("1");
+  it("lets a valid session through and records the path for re-sign-in", async () => {
+    const session = await createSession({ accessToken: "at", refreshToken: "rt", expiresIn: 300 });
+    const res = await proxy(req("/ingestion", session.id));
+    expect(passedThrough(res)).toBe(true);
+    expect(res.headers.get("x-middleware-request-x-opencg-path")).toBe("/ingestion");
   });
 
-  it("rejects a session issued under a different password", async () => {
-    vi.stubEnv("OPENCG__ADMIN_UI__PASSWORD", "pw");
-    const res = await proxy(req("/api/proxy/entities/abc", await issueSession("other")));
+  it("rejects an unknown session id", async () => {
+    const res = await proxy(req("/api/proxy/search/vector", "x".repeat(43)));
     expect(res.status).toBe(401);
   });
 
-  it.each(["/login", "/api/auth/login", "/api/healthz"])("leaves %s public", async (path) => {
-    vi.stubEnv("OPENCG__ADMIN_UI__PASSWORD", "pw");
-    const res = await proxy(req(path));
-    expect(res.headers.get("x-middleware-next")).toBe("1");
+  it("treats a session whose refresh failed as signed out", async () => {
+    const session = await createSession({ accessToken: "at", refreshToken: "rt", expiresIn: 10 });
+    const res = await proxy(req("/ingestion", session.id));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/api/auth/signin");
+  });
+
+  it.each(["/api/auth/signin", "/api/auth/callback", "/api/auth/signout", "/api/healthz"])(
+    "leaves %s open",
+    async (path) => {
+      expect(passedThrough(await proxy(req(path)))).toBe(true);
+    },
+  );
+
+  it("returns 503 when the session store is down", async () => {
+    setSessionStoreForTests({
+      get: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      set: async () => undefined,
+      del: async () => undefined,
+    });
+    const res = await proxy(req("/api/proxy/entities/abc", "y".repeat(43)));
+    expect(res.status).toBe(503);
   });
 });

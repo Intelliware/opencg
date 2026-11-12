@@ -58,7 +58,8 @@ The thin MVP, the first end-to-end working slice, runs in Docker Compose, with a
 | Pipeline · ingestion · workers | Python 3.12 (FastAPI, asyncpg, httpx) |
 | Vector store | Qdrant (dense + lexical fusion) |
 | Catalog · audit · graph | PostgreSQL 16 + Apache AGE |
-| Cache | Valkey |
+| Cache · admin UI sessions | Valkey |
+| Identity · policy | Any OIDC provider (bundled Keycloak `26.8.1` for local use); OPA `1.21.4` for entitlement and action decisions |
 | Embeddings | Ollama (`nomic-embed-text`, compose-internal) |
 | Chat / extraction | Ollama Cloud (`gemma4:31b` default) |
 | Admin UI | Next.js 16 (App Router, React 19) + Storybook |
@@ -167,42 +168,27 @@ Add the same entry to `.cursor/mcp.json` (this project) or `~/.cursor/mcp.json` 
 
 ### Remote connection over HTTP (connect by URL)
 
-The server also speaks the **Streamable HTTP** transport at `http://localhost:8181/mcp` (the same port as the health checks) — so clients connect by **URL** with no subprocess, and it's reachable across the network once you expose the port (e.g. a tunnel).
+The server also speaks the **Streamable HTTP** transport at `http://localhost:8181/mcp` (the same port as the health checks), so clients connect by **URL** with no subprocess.
 
-> **Set a token before exposing it.** With `OPENCG__MCP__HTTP_TOKEN` unset, `/mcp` is open (fine on loopback — the server logs an "unauthenticated" warning). Set it in `.env` and pass it as a bearer header to require auth.
-
-Claude Code:
+**Open mode (`OPENCG__AUTH__MODE=none`, the default).** On a loopback-only stack `/mcp` is open:
 
 ```bash
-claude mcp add --transport http opencg http://localhost:8181/mcp \
-  --header "Authorization: Bearer $OPENCG__MCP__HTTP_TOKEN"
+claude mcp add --transport http opencg http://localhost:8181/mcp
 ```
 
-(Drop `--header` when no token is set.) Cursor and Claude Desktop use the `url` form:
+To lock it down in `dev`, create an API key with `make api-key NAME=claude-code` and pass it as a header (`--header "Authorization: Bearer ock_…"`). API keys are refused outside `OPENCG__ENVIRONMENT=dev`.
 
-```json
-{
-  "mcpServers": {
-    "opencg": {
-      "url": "http://localhost:8181/mcp",
-      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
-    }
-  }
-}
-```
-
-### Connect from claude.ai (OAuth — stopgap)
-
-claude.ai and Claude Desktop's "Add custom connector" GUI authenticate via **OAuth**, not a bearer header. The MCP server ships a **temporary, minimal** OAuth server (single shared password, in-memory tokens — see `services/mcp-server/src/oauth.ts`, marked `REPLACE-BEFORE-PROD`). Enable it by setting both:
+**Signed-in mode (`OPENCG__AUTH__MODE=oidc`).** `/mcp` is an OAuth protected resource: it publishes `/.well-known/oauth-protected-resource` pointing at your identity provider, and clients sign in there. Point the client at the URL and follow its sign-in prompt:
 
 ```bash
-OPENCG__MCP__PUBLIC_URL=https://your-host.ngrok.app   # externally reachable base URL
-OPENCG__MCP__OAUTH_PASSWORD=<a shared access password>
+claude mcp add --transport http opencg http://localhost:8181/mcp   # Claude Code signs in through the IdP
 ```
 
-Restart the mcp-server, then in claude.ai: **Settings → Connectors → Add custom connector** → URL `https://your-host.ngrok.app/mcp`. Claude runs the OAuth flow; on the consent screen, enter the access password. (The static `OPENCG__MCP__HTTP_TOKEN` keeps working alongside this for Claude Code / Cursor.)
+Cursor and Claude Desktop use the `url` form (`{"mcpServers": {"opencg": {"url": "http://localhost:8181/mcp"}}}`). With the bundled Keycloak, clients on `localhost` register themselves automatically; with Entra ID, pre-register a client and enter its ID (see [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#connecting-your-own-idp-entra-id-okta-auth0-keycloak)).
 
-> This OAuth is a stopgap, not production auth: one shared password (no per-user identity), tokens are in-memory (lost on restart), self-issued. Replace with a real identity provider before any real deployment.
+### Connect from claude.ai
+
+claude.ai's **Settings → Connectors → Add custom connector** needs an HTTPS URL it can reach, and `oidc` mode. Expose the MCP port (for example through a tunnel), set `OPENCG__MCP__PUBLIC_URL` to that base URL, and add `https://your-host/mcp` as the connector. claude.ai discovers your IdP from the protected-resource metadata and runs the sign-in. Never expose a `none`-mode stack this way: the services refuse to start in `none` mode on a non-loopback bind address for that reason.
 
 ### Run on the host instead of Docker
 
@@ -216,7 +202,7 @@ Then use `node /absolute/path/to/opencg/services/mcp-server/dist/index.js` as th
 
 ### Identity
 
-Identity is stubbed in v0 (`local-dev` / roles `admin,reader` / tenant `default`). Override per client with the `OPENCG__IDENTITY__PRINCIPAL`, `OPENCG__IDENTITY__ROLES`, and `OPENCG__TENANT` environment variables.
+In `none` mode every request runs as the stub identity (`local-dev` / roles `admin,reader` / tenant `default`; override with `OPENCG__IDENTITY__PRINCIPAL`, `OPENCG__IDENTITY__ROLES` and `OPENCG__TENANT`). In `oidc` mode identity comes only from the access token. Either way, OPA decides what each identity may retrieve and do. See [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#authentication-and-access-control).
 
 ## Admin UI
 
@@ -228,9 +214,8 @@ Identity is stubbed in v0 (`local-dev` / roles `admin,reader` / tenant `default`
 | `/entities` | Filterable, paginated entity browser; click through to detail, lineage, and a tombstone action |
 | `/ingestion` | Connector list + last-run summaries; a "Run now" form for git ingests |
 | `/graph` | Map (interactive graph with concept search and a detail panel), Concepts, Candidate review, and Vocabulary tabs |
-| `/login` | Sign-in, used only when `OPENCG__ADMIN_UI__PASSWORD` is set (the optional access gate) |
 
-Without a password the UI shows an "Unauthenticated mode" banner on every page; see [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#admin-ui-access-gate).
+In `oidc` mode every page needs a sign-in through your identity provider (the sidebar shows who you are and a Sign out button), and actions your role may not take show a "permission denied" state. In `none` mode the UI shows an "Unauthenticated mode" banner on every page; see [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#authentication-and-access-control).
 
 Every shared component has a Storybook story neighbour.
 
@@ -244,11 +229,11 @@ Every shared component has a Storybook story neighbour.
 - **Observability**: one OTel trace per MCP tool call across the MCP server and pipeline, with `correlation_id` on every span and a child span per model call; `/metrics` on the pipeline, ingestion and MCP server; token usage and estimated cost per provider in every usage envelope, audit row and admin UI view; a compose-local OTel Collector. Prometheus, Tempo and Grafana with six dashboards are an opt-in overlay (`make up-obs`).
 - **Immutable audit log** at `opencg.audit_log` (range-partitioned on `created_at`, with a row-level immutability trigger).
 
-**Not in v0:** intent classifier, OPA enforcement, Confluence/custom-API/web connectors, background enrichment workers, log aggregation (Loki, planned as `add-log-aggregation`), alerting, a `local-prod` compose profile, and real auth.
+**Not in v0:** intent classifier, Confluence/custom-API/web connectors, background enrichment workers, log aggregation (Loki, planned as `add-log-aggregation`), alerting, a `local-prod` compose profile, multi-tenancy, and entitlement on individual graph concepts and edges.
 
 ## API reference
 
-Host ports below are the defaults; all of them can be moved in `.env`. None of these HTTP APIs authenticate callers except `/mcp` and the admin UI (see [`SECURITY.md`](./SECURITY.md)).
+Host ports below are the defaults; all of them can be moved in `.env`. In `oidc` mode every endpoint except `/healthz`, `/readyz` and `/metrics` needs `Authorization: Bearer <access token>`, and every route is authorized by OPA as one action. In `none` mode they run as the stub identity, and OPA still applies.
 
 ### Pipeline (`http://localhost:8000`)
 
@@ -278,7 +263,7 @@ Every graph write accepts an optional `{"reason": "…"}` and records a row in `
 |---|---|
 | `GET /healthz` · `GET /readyz` | Liveness and readiness |
 | `GET /connectors` | Available connectors (`git` supported; Confluence, custom API and web deferred) |
-| `POST /run/git` | Start a git ingest `{repo_url}` in the background; the URL is validated first (see business rules) |
+| `POST /run/git` | Start a git ingest `{repo_url, classification?}` in the background (`classification`: `public`, `internal` (default) or `confidential:<domain>`); the URL is validated first (see business rules) |
 | `GET /runs/recent` | In-memory run history (cleared on restart) |
 
 The CLI inside the container (`python -m opencg_ingestion.cli git <url>` / `re-extract`) offers the same ingest plus re-extraction, without the URL restrictions.
@@ -287,15 +272,15 @@ The CLI inside the container (`python -m opencg_ingestion.cli git <url>` / `re-e
 
 | Endpoint | Purpose |
 |---|---|
-| `/mcp` | Streamable HTTP MCP transport; bearer token and/or OAuth when configured |
+| `/mcp` | Streamable HTTP MCP transport. `oidc` mode: needs an access token from the configured issuer (`401` carries `WWW-Authenticate` with the resource-metadata URL). `none` mode: open, or a dev-only API key when configured |
 | `GET /healthz` · `GET /readyz` | Liveness; readiness of the pipeline |
-| `/authorize`, `/token`, `/register`, `/.well-known/oauth-*`, `POST /oauth/approve` | OAuth stopgap, mounted only when `OPENCG__MCP__OAUTH_PASSWORD` and `OPENCG__MCP__PUBLIC_URL` are set |
+| `/.well-known/oauth-protected-resource` | OAuth protected-resource metadata (`oidc` mode): the `/mcp` resource and its authorization server (your IdP) |
 
 Tools: `opencg/retrieve_for_context` and `opencg/traverse_graph` are live; `opencg/search`, `opencg/get_entity` and `opencg/submit_feedback` return `not_implemented_in_mvp`.
 
 ### Admin UI routes (`http://localhost:3000`)
 
-Browser code never calls the pipeline directly. It goes through same-origin Next route handlers: `/api/proxy/search/vector`, `/api/proxy/entities/{id}`, `/api/proxy/ingestion/git/run` and `/api/proxy/graph/**`. Also served: `/api/healthz` (pipeline-independent liveness) and `/api/auth/login` and `/api/auth/logout` (the access gate).
+Browser code never calls the pipeline directly. It goes through same-origin Next route handlers: `/api/proxy/search/vector`, `/api/proxy/entities/{id}`, `/api/proxy/ingestion/git/run` and `/api/proxy/graph/**`. Also served: `/api/healthz` (pipeline-independent liveness) and `/api/auth/signin`, `/api/auth/callback` and `/api/auth/signout` (OIDC sign-in in `oidc` mode).
 
 ## Data model
 
@@ -348,7 +333,7 @@ Provisioned for caching, unused in v0.
 
 ## Key business rules
 
-- **Retrieval.** The dense (Qdrant) and lexical (Postgres full-text) legs run in parallel and are fused by reciprocal rank fusion. Assembly keeps candidates whose `classification` the caller's roles allow (`admin` and `reader`: `internal`, `public`; `public`: `public`; no matching role: `public` only), within the token budget. Every retrieval writes one audit row.
+- **Retrieval.** The dense (Qdrant) and lexical (Postgres full-text) legs run in parallel and are fused by reciprocal rank fusion. The pipeline runs identity → hybrid retrieval → **entitle** → assemble: one OPA call decides every candidate (`public`/`internal` need `reader` or `admin`; `confidential:<domain>` needs the `<domain>` role; anything else is denied), denied candidates are removed before the token budget, and assembly keeps what fits. Every retrieval writes one audit row recording each candidate's decision and the policy revision.
 - **Tombstones** are soft and idempotent; the original timestamp is kept. A tombstoned entity is excluded from both retrieval legs and from vector search, while its Qdrant point stays. Re-ingesting the source clears the tombstone. Tombstoning does not cascade to chunks.
 - **Ingestion is idempotent.** Stable `uuid5` IDs mean re-ingesting unchanged content updates rows in place instead of duplicating them. Code files become one chunk per AST symbol (via graphifyy); text files are split into paragraph chunks.
 - **Graph states.** graphifyy code relationships are written `confirmed`. Relationships extracted from text are `candidate` until an operator promotes them, and those below `OPENCG__PROVIDERS__EXTRACTION__MIN_CONFIDENCE` (0.6) or with an unknown type are dropped. Extraction is best-effort: failures are logged and counted and never fail an ingest.
@@ -375,7 +360,7 @@ CI runs `static` and `dependency-review` on every pull request, and the full-sta
 - **No schema migrations.** Changing an init script needs a fresh volume (`make down-v`).
 - **Run history is in memory.** The ingestion run list clears when the service restarts.
 - **Moderate and low dependency advisories** remain, each needing a major-version upgrade. They are listed with their exposure in [`SECURITY.md`](./SECURITY.md#dependency-advisories).
-- **v0 has no real authentication.** The known stopgaps are listed in [`SECURITY.md`](./SECURITY.md#deployment-model-and-known-stopgaps).
+- **`none` auth mode is the default.** It is meant for a single-user, loopback-only stack. Use `oidc` for anything shared; see [`SECURITY.md`](./SECURITY.md#deployment-model-and-known-stopgaps).
 
 ## OpenSpec is the contract
 
