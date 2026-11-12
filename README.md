@@ -370,7 +370,6 @@ CI runs `static` and `dependency-review` on every pull request, and the full-sta
 
 ## Known issues
 
-- **Intermittent hydration error.** About 1 in 100 production page loads logs React error #418, most often on `/entities`. The page recovers on its own. The e2e suite retries once and annotates the report ([#2](https://github.com/Intelliware/opencg/issues/2)).
 - **Audit partitioning is planned, not active.** Every audit row lands in the default partition until weekly partitions are pre-created.
 - **No schema migrations.** Changing an init script needs a fresh volume (`make down-v`).
 - **Run history is in memory.** The ingestion run list clears when the service restarts.
