@@ -25,6 +25,7 @@ up-d: ## Start the dev stack (detached)
 	$(COMPOSE) --profile dev up -d
 
 up-obs: ## OPTIONAL: dev stack + Prometheus/Tempo/Grafana overlay (detached, ~700 MB more RAM)
+	@./scripts/check-grafana-exposure.sh
 	$(COMPOSE_OBS) --profile dev up -d --wait
 
 # The observability overlay's files are passed too, so its containers and

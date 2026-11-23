@@ -302,11 +302,11 @@ make down-v        # also DELETES the prometheus-data, tempo-data and grafana-da
 | Prometheus | `OPENCG__PROMETHEUS__HOST_PORT` | 9090 | Web UI and HTTP API, no login. |
 | Tempo | `OPENCG__TEMPO__HOST_PORT` | 3200 | Query API, no login. |
 
-Like every other port, they bind to `OPENCG__BIND_ADDRESS` (loopback by default).
+Unlike every other port, these do **not** follow `OPENCG__BIND_ADDRESS`. Prometheus and Tempo have no authentication, and Tempo's traces carry principal and tenant names, so they always bind to `127.0.0.1`. From another machine, use an SSH tunnel (`ssh -L 9090:127.0.0.1:9090 host`). Grafana binds to `127.0.0.1` unless you set `OPENCG__GRAFANA__BIND_ADDRESS`; `make up-obs` then refuses to start while `OPENCG__GRAFANA__ADMIN_PASSWORD` is unset or `admin`. This matters most in `oidc` mode, which is the mode for a non-loopback `OPENCG__BIND_ADDRESS`.
 
 ### Grafana login
 
-Anonymous access is off, even on loopback. Sign in as `admin` with the password from `OPENCG__GRAFANA__ADMIN_PASSWORD` (default `admin`). Set a real password in `.env` before binding beyond loopback. Grafana stores the password in its volume on first start, so changing it later needs `make down-v` (or a password reset with `grafana cli admin reset-admin-password` inside the container).
+Anonymous access is off, even on loopback. Sign in as `admin` with the password from `OPENCG__GRAFANA__ADMIN_PASSWORD` (default `admin`). Set a real password in `.env` before setting `OPENCG__GRAFANA__BIND_ADDRESS` beyond loopback (`make up-obs` checks). Grafana stores the password in its volume on first start, so changing it later needs `make down-v` (or a password reset with `grafana cli admin reset-admin-password` inside the container).
 
 ### Dashboards
 

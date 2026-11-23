@@ -51,6 +51,7 @@
 - [x] 5.4 `infra/compose/docker-compose.observability.yml`: `prom/prometheus:v3.15.1`, `grafana/tempo:3.1.1`, `grafana/grafana:13.2.5` (Grafana with `GF_AUTH_ANONYMOUS_ENABLED=false`), healthchecks, named volumes, ports `${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__<SERVICE>__HOST_PORT:-default}` (Grafana 3030, not 3001, which the e2e overlay's gated admin UI uses; Prometheus 9090; Tempo 3200), retention from `OPENCG__PROMETHEUS__RETENTION`, and the collector command override merging both configs
 - [x] 5.5 Makefile: `up-obs`, `smoke-obs`, and `down` / `down-v` with `--remove-orphans`; `make help` text marking `up-obs` and `smoke-obs` as optional
 - [x] 5.6 `.env.example`: a block headed "Observability (only used with `make up-obs`)" with commented `OPENCG__GRAFANA__HOST_PORT`, `OPENCG__GRAFANA__ADMIN_PASSWORD`, `OPENCG__PROMETHEUS__HOST_PORT`, `OPENCG__PROMETHEUS__RETENTION`, `OPENCG__TEMPO__HOST_PORT`
+- [x] 5.8 Review fix (PR #6 review): Prometheus and Tempo always publish on `127.0.0.1`, whatever `OPENCG__BIND_ADDRESS` is; Grafana on `${OPENCG__GRAFANA__BIND_ADDRESS:-127.0.0.1}`; `scripts/check-grafana-exposure.sh` (run by `make up-obs`) refuses a non-loopback Grafana with an unset or `admin` password
 - [x] 5.7 Measure resident memory of the three backends on the reference stack after `smoke-obs`, and record it here and in OPERATIONS.md (2026-11-12: Tempo ~340 MB, Grafana ~260 MB, Prometheus ~70 MB; ~670 MB total)
 
 ## 6. Grafana dashboards as code
