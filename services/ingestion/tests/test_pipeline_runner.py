@@ -314,3 +314,26 @@ async def test_run_counts_success_and_failure(monkeypatch):
     with pytest.raises(RuntimeError):
         await pipeline_runner.run("https://example.com/repo.git", cfg)
     assert _sample("opencg_ingestion_runs_total", failed) == failed_before + 1
+
+
+@pytest.mark.asyncio
+async def test_classification_reaches_catalogue_and_vector_payload(monkeypatch):
+    _text_only(monkeypatch)
+    payloads: list[dict] = []
+    classes: list[str] = []
+
+    class Vector(_Vector):
+        async def upsert(self, *, entity_id: str, **kwargs) -> None:
+            payloads.append(kwargs["payload"])
+
+    class Catalog(_Catalog):
+        async def insert_entity(self, **kwargs) -> None:
+            classes.append(kwargs["classification"])
+
+    monkeypatch.setattr(pipeline_runner, "VectorIndex", Vector)
+    monkeypatch.setattr(pipeline_runner, "CatalogStore", Catalog)
+    cfg = openCGConfig()
+    cfg.providers.extraction.enabled = False
+    await pipeline_runner.ingest_documents([_doc(0)], cfg=cfg, classification="confidential:legal")
+    assert classes and set(classes) == {"confidential:legal"}  # parent and chunk rows
+    assert payloads and {p["classification"] for p in payloads} == {"confidential:legal"}

@@ -3,7 +3,8 @@ import type { AddressInfo } from "node:net";
 import type { InMemorySpanExporter } from "@opentelemetry/sdk-trace";
 import { request as undiciRequest } from "undici";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { McpConfig } from "./config.js";
+import { Authenticator } from "./auth.js";
+import { loadConfig, type McpConfig } from "./config.js";
 import { createHttpApp } from "./http-app.js";
 import { requestsTotal, stageLatencySeconds } from "./metrics.js";
 import { PipelineClient } from "./pipeline-client.js";
@@ -16,15 +17,15 @@ import {
 } from "./telemetry.js";
 
 function config(httpToken: string | null = null): McpConfig {
-  return {
-    tenant: "acme",
-    identity: { principal: "t", roles: ["reader"] },
-    pipelineUrl: "http://unused",
-    port: 0,
-    httpToken,
-    publicUrl: "http://localhost:0",
-    oauthPassword: null,
-  };
+  return loadConfig({
+    OPENCG__TENANT: "acme",
+    OPENCG__IDENTITY__PRINCIPAL: "t",
+    OPENCG__IDENTITY__ROLES: "reader",
+    OPENCG__PIPELINE__URL: "http://unused",
+    OPENCG__MCP__PORT: "0",
+    OPENCG__ENVIRONMENT: "dev",
+    ...(httpToken ? { OPENCG__MCP__HTTP_TOKEN: httpToken } : {}),
+  });
 }
 
 async function count(tool: string, outcome: string): Promise<number> {
@@ -174,7 +175,12 @@ describe("HTTP /metrics", () => {
   });
 
   async function start(token: string | null): Promise<string> {
-    const ctx = { config: config(token), pipeline: new PipelineClient("http://127.0.0.1:1") };
+    const cfg = config(token);
+    const ctx = {
+      config: cfg,
+      pipeline: new PipelineClient("http://127.0.0.1:1"),
+      authenticator: new Authenticator(cfg),
+    };
     http = createHttpApp(ctx).listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => http!.once("listening", resolve));
     return `http://127.0.0.1:${(http.address() as AddressInfo).port}`;

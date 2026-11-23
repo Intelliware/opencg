@@ -70,10 +70,10 @@ make e2e-ui   # Playwright's UI mode, for writing and debugging tests
 
 What the suite does:
 
-- **Overlays.** It applies the smoke and e2e compose overlays (`infra/compose/docker-compose.{smoke,e2e}.yml`). These add a deterministic chat stub, point ingestion's extraction at it so no external provider is ever called, and start a second admin UI with the access gate on, on port 3001.
+- **Overlays.** It applies the smoke and e2e compose overlays (`infra/compose/docker-compose.{smoke,e2e}.yml`). These add a deterministic chat stub and point ingestion's extraction at it, so no external provider is ever called.
 - **Run-scoped data.** It seeds its own uniquely named fixture. Every assertion and every change it makes (tombstones, promotions, vocabulary edits) targets only that run's data, so it is safe on a stack you use day to day.
 - **Teardown.** On teardown it puts ingestion back on your `.env` chat settings. Set `E2E_KEEP_OVERLAY=1` to skip that when re-running often, as `make e2e-ui` does.
-- **Gated main instance.** If your main admin UI has `OPENCG__ADMIN_UI__PASSWORD` set, the suite signs in with it and skips the "unauthenticated banner" test.
+- **Auth mode.** `OPENCG_TEST_AUTH_MODE` (default `oidc`) runs smoke and e2e against the bundled Keycloak and OPA: e2e signs in as `alice` (admin) and `bob` (reader) and covers sign-in, a reader's denied action, attribution and sign-out. `OPENCG_TEST_AUTH_MODE=none` is the lighter path; it skips those tests and runs the "unauthenticated banner" test instead.
 - **More browsers.** `E2E_ALL_BROWSERS=1` adds Firefox and WebKit locally.
 
 Specs live in `services/admin-ui/e2e/`. Locate elements by role, label or a run-scoped ID, never by position or "the first row". Assert on DOM state, not on canvas pixels: the graph map is a canvas, so test its side panel instead.

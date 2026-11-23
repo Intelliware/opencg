@@ -9,16 +9,26 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { VectorSearchResult } from "@/lib/api";
+import { PermissionDenied } from "@/components/PermissionDenied";
 import { summarizeCost } from "@/lib/cost";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
-async function runSearch(query: string, topK: number): Promise<VectorSearchResult | null> {
+type SearchOutcome =
+  | { kind: "ok"; result: VectorSearchResult }
+  | { kind: "failed" }
+  | { kind: "signin" }
+  | { kind: "denied"; action: string };
+
+async function runSearch(query: string, topK: number): Promise<SearchOutcome> {
   const res = await fetch("/api/proxy/search/vector", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ query, top_k: topK }),
   });
-  if (!res.ok) return null;
-  return (await res.json()) as VectorSearchResult;
+  const auth = await checkProxyAuth(res, "run a vector search");
+  if (auth.kind !== "ok") return auth;
+  if (!res.ok) return { kind: "failed" };
+  return { kind: "ok", result: (await res.json()) as VectorSearchResult };
 }
 
 /** The search's single embedding call as a provider-usage row (absent on older pipelines). */
@@ -44,20 +54,28 @@ export function VectorExplorer() {
   const [topK, setTopK] = useState(20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [denied, setDenied] = useState<string | null>(null);
   const [response, setResponse] = useState<VectorSearchResult | null>(null);
 
   const executeSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
     setBusy(true);
     setError(null);
-    const r = await runSearch(searchQuery.trim(), topK);
+    setDenied(null);
+    const outcome = await runSearch(searchQuery.trim(), topK);
     setBusy(false);
-    if (!r) {
+    if (outcome.kind === "signin") return;
+    if (outcome.kind === "denied") {
+      setDenied(outcome.action);
+      setResponse(null);
+      return;
+    }
+    if (outcome.kind === "failed") {
       setError("Search failed — see pipeline logs.");
       setResponse(null);
       return;
     }
-    setResponse(r);
+    setResponse(outcome.result);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -95,6 +113,7 @@ export function VectorExplorer() {
         </Button>
       </form>
 
+      {denied ? <PermissionDenied action={denied} className="mb-3" /> : null}
       {error ? (
         <div className="p-3 text-red-600 dark:text-red-400">{error}</div>
       ) : null}

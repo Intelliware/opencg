@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from authfakes import FakeOpa, guarded_app
 from fastapi.testclient import TestClient
 from opencg_pipeline import admin_routes
 from opencg_pipeline.providers import EmbeddingResult
@@ -54,7 +54,7 @@ class FakeCatalog:
     async def get_entity_with_lineage(self, *, tenant: str, entity_id: str):
         return self.get_result
 
-    async def tombstone(self, *, tenant: str, entity_id: str):
+    async def tombstone(self, *, tenant: str, entity_id: str, on_conn=None):
         return self.tombstone_result
 
     async def live_entity_ids(self, *, tenant: str, entity_ids: list[str]) -> set[str]:
@@ -113,8 +113,9 @@ def _mount(
     embeddings: FakeEmbeddings | None = None,
     ingestion_client: httpx.AsyncClient | None = None,
     audit: FakeAudit | None = None,
+    opa: FakeOpa | None = None,
 ) -> TestClient:
-    app = FastAPI()
+    app = guarded_app(opa=opa)
     app.include_router(admin_routes.router)
     app.state.cfg = openCGConfig()
     app.state.tracer = FakeTracer()
@@ -237,6 +238,50 @@ def test_get_entity_returns_lineage_and_audit_appearances():
     assert body["lineage"]["children"][0]["entity_id"] == "c1"
     assert body["lineage"]["parent"] is None
     assert body["audit_appearances"][0]["id"] == 12
+
+
+def _legal_row(entity_id: str = "secret") -> dict[str, Any]:
+    return {
+        "entity_id": entity_id,
+        "tenant": "default",
+        "source": "git",
+        "source_uri": "git://x/contract.md",
+        "title": "Contract",
+        "body": "privileged text",
+        "content_hash": "h",
+        "classification": "confidential:legal",
+        "freshness_state": "fresh",
+        "updated_at": datetime(2026, 6, 11),
+        "tombstoned_at": None,
+        "lineage": {},
+    }
+
+
+def test_get_entity_hides_content_the_caller_may_not_retrieve():
+    # Review fix: /entities/{id} used to return a confidential body to any reader.
+    opa = FakeOpa(deny_classifications={"confidential:legal"})
+    client = _mount(catalog=FakeCatalog(get_result=_legal_row()), opa=opa)
+    resp = client.get("/entities/secret")
+    assert resp.status_code == 404
+    assert "privileged" not in resp.text
+    assert opa.entitle_calls, "the entity must be checked with OPA"
+
+
+def test_list_entities_drops_rows_the_caller_may_not_retrieve():
+    catalog = FakeCatalog()
+    catalog.list_result = (catalog.list_result[0] + [_legal_row()], 2)
+    opa = FakeOpa(deny_classifications={"confidential:legal"})
+    body = _mount(catalog=catalog, opa=opa).get("/entities").json()
+    assert [i["entity_id"] for i in body["items"]] == ["e1"]
+    assert body["total"] == 1
+
+
+def test_entities_fail_closed_when_policy_unavailable():
+    client = _mount(
+        catalog=FakeCatalog(get_result=_legal_row()), opa=FakeOpa(entitle_unavailable=True)
+    )
+    assert client.get("/entities/secret").status_code == 503
+    assert client.get("/entities").status_code == 503
 
 
 def test_get_entity_404():

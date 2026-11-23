@@ -3,25 +3,24 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { request as undiciRequest } from "undici";
 import { afterEach, describe, expect, it } from "vitest";
-import type { McpConfig } from "./config.js";
-import { bearerAllowed, buildMcpServer, handleMcpHttp } from "./server.js";
+import { Authenticator } from "./auth.js";
+import { loadConfig } from "./config.js";
+import { buildMcpServer, handleMcpHttp } from "./server.js";
 
 function ctx(httpToken: string | null = null) {
-  const config: McpConfig = {
-    tenant: "default",
-    identity: { principal: "t", roles: ["reader"] },
-    pipelineUrl: "http://unused",
-    port: 8080,
-    httpToken,
-    publicUrl: "http://localhost:8080",
-    oauthPassword: null,
-  };
+  const config = loadConfig({
+    OPENCG__IDENTITY__PRINCIPAL: "t",
+    OPENCG__IDENTITY__ROLES: "reader",
+    OPENCG__PIPELINE__URL: "http://unused",
+    OPENCG__ENVIRONMENT: "dev",
+    ...(httpToken ? { OPENCG__MCP__HTTP_TOKEN: httpToken } : {}),
+  });
   const pipeline = {
     retrieve: async () => ({}),
     traverse: async () => ({ nodes: [], edges: [] }),
     health: async () => true,
   } as never;
-  return { config, pipeline };
+  return { config, pipeline, authenticator: new Authenticator(config) };
 }
 
 const FIVE_TOOLS = [
@@ -42,21 +41,6 @@ describe("buildMcpServer", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...FIVE_TOOLS].sort());
     await client.close();
-  });
-});
-
-describe("bearerAllowed", () => {
-  it("is open when no token is configured", () => {
-    expect(bearerAllowed(undefined, null)).toBe(true);
-    expect(bearerAllowed("Bearer anything", null)).toBe(true);
-  });
-  it("rejects a missing or malformed header when a token is set", () => {
-    expect(bearerAllowed(undefined, "s3cret")).toBe(false);
-    expect(bearerAllowed("s3cret", "s3cret")).toBe(false);
-  });
-  it("rejects a wrong token and accepts the right one", () => {
-    expect(bearerAllowed("Bearer nope", "s3cret")).toBe(false);
-    expect(bearerAllowed("Bearer s3cret", "s3cret")).toBe(true);
   });
 });
 

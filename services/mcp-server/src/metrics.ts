@@ -26,6 +26,16 @@ export const stageLatencySeconds = new Histogram({
   registers: [registry],
 });
 
+// Mirrors `opencg_shared.metrics.AUTH_FAILURES`. `reason` is one of
+// token_missing | token_expired | token_invalid | issuer_unreachable |
+// api_key_disabled; `service` is always `mcp-server` here.
+export const authFailuresTotal = new Counter({
+  name: "opencg_auth_failures_total",
+  help: "Failed authentications by service and reason.",
+  labelNames: ["service", "reason"] as const,
+  registers: [registry],
+});
+
 export function recordToolCall(tool: string, outcome: Outcome, seconds: number): void {
   requestsTotal.inc({ tool, outcome });
   stageLatencySeconds.observe({ stage: "mcp" }, seconds);
@@ -38,8 +48,8 @@ export async function metricsHandler(_req: Request, res: Response): Promise<void
 }
 
 /**
- * Counts `/mcp` requests turned away by either auth gate (static bearer or
- * OAuth) as `rejected`. The tool is not known before auth, hence `unknown`.
+ * Counts `/mcp` requests turned away by the auth gate (OIDC token or API
+ * key) as `rejected`. The tool is not known before auth, hence `unknown`.
  */
 export function countAuthRejections(_req: Request, res: Response, next: NextFunction): void {
   res.on("finish", () => {

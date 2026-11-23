@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { ADMIN_URL, AUTH_STATE, MAIN_PASSWORD } from "./e2e/env";
+import { ADMIN_URL, ALICE_STATE, TEST_AUTH_MODE } from "./e2e/env";
 
 const CI = Boolean(process.env.CI);
 
@@ -22,11 +22,13 @@ export default defineConfig({
     : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: ADMIN_URL,
-    storageState: MAIN_PASSWORD ? AUTH_STATE : undefined,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     // Never the server's UTC, so SSR/hydration date mismatches surface in CI too.
     timezoneId: "Pacific/Auckland",
+    // oidc mode: every test runs signed in as alice (admin) unless it opts out;
+    // global setup signs in through the bundled Keycloak and saves this state.
+    storageState: TEST_AUTH_MODE === "oidc" ? ALICE_STATE : undefined,
   },
   projects: browsers.map((device) => ({
     name: devices[device].defaultBrowserType,

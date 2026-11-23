@@ -1,6 +1,6 @@
 import { ShieldAlert } from "lucide-react";
 
-// Shown on every page while OPENCG__ADMIN_UI__PASSWORD is unset.
+// Shown on every page while OPENCG__AUTH__MODE=none.
 export function UnauthenticatedBanner() {
   return (
     <div
@@ -11,7 +11,8 @@ export function UnauthenticatedBanner() {
       <p>
         <strong>Unauthenticated mode — local use only.</strong> Anyone who can reach this
         page can delete content and start ingestion runs. Set{" "}
-        <code className="font-mono">OPENCG__ADMIN_UI__PASSWORD</code> before exposing it.
+        <code className="font-mono">OPENCG__AUTH__MODE=oidc</code> and sign in through your
+        identity provider before exposing it (see <code className="font-mono">docs/OPERATIONS.md</code>).
       </p>
     </div>
   );

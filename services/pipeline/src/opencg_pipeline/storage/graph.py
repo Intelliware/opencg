@@ -1008,6 +1008,11 @@ async def _write_audit(
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
 ) -> None:
+    # The request's pending access audit row (graph.write / vocab.write) goes in
+    # the same transaction as the change it authorizes.
+    from opencg_pipeline.security import insert_pending_access_row
+
+    await insert_pending_access_row(conn)
     try:
         await _insert_graph_audit(
             conn,

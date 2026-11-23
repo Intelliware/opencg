@@ -49,14 +49,14 @@ class AuditStore:
           vector_collection, vector_snapshot_id,
           candidate_ids, candidate_decisions, final_entity_ids,
           final_context_hash, tokens_in, tokens_out, latency_ms,
-          outcome, error_code, estimated_cost_usd, usage_by_provider
+          outcome, error_code, estimated_cost_usd, usage_by_provider, auth_method
         ) VALUES (
           $1,$2,$3,$4,$5,$6,
           $7,$8,$9,
           $10,$11,
           $12,$13,$14,
           $15,$16,$17,$18,
-          $19,$20,$21,$22
+          $19,$20,$21,$22,$23
         )
         RETURNING id
         """
@@ -87,6 +87,7 @@ class AuditStore:
                     row.get("error_code"),
                     row.get("estimated_cost_usd"),
                     json.dumps(usage) if usage is not None else None,
+                    row.get("auth_method"),
                 )
         except Exception:
             record_audit_write("retrieval", "error")
@@ -101,7 +102,7 @@ class AuditStore:
                query, candidate_ids::text[] AS candidate_ids,
                final_entity_ids::text[] AS final_entity_ids,
                final_context_hash, tokens_in, tokens_out, latency_ms,
-               outcome, error_code, estimated_cost_usd, usage_by_provider
+               outcome, error_code, estimated_cost_usd, usage_by_provider, auth_method
         FROM opencg.audit_log
         WHERE tenant = $1
         ORDER BY created_at DESC
@@ -111,7 +112,8 @@ class AuditStore:
             rows = await conn.fetch(sql, tenant, limit)
         return [_cost_fields(dict(r)) for r in rows]
 
-    async def get(self, audit_id: int) -> dict[str, Any] | None:
+    async def get(self, audit_id: int, *, tenant: str) -> dict[str, Any] | None:
+        """One audit row, only if it belongs to `tenant` (another tenant's row is not found)."""
         pool = self._pool_required()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -123,9 +125,10 @@ class AuditStore:
                           final_entity_ids::text[] AS final_entity_ids,
                           final_context_hash, tokens_in, tokens_out,
                           latency_ms, outcome, error_code, legal_hold,
-                          estimated_cost_usd, usage_by_provider
-                   FROM opencg.audit_log WHERE id = $1""",
+                          estimated_cost_usd, usage_by_provider, auth_method
+                   FROM opencg.audit_log WHERE id = $1 AND tenant = $2""",
                 audit_id,
+                tenant,
             )
         return _cost_fields(dict(row)) if row else None
 

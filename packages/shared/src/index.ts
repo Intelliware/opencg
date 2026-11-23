@@ -86,6 +86,8 @@ export interface AuditRecord {
   latency_ms: number;
   outcome: "ok" | "error";
   error_code?: string;
+  /** How the principal authenticated; absent on rows written before auth_method was recorded. */
+  auth_method?: "oidc" | "none" | "api_key";
   /** Null on rows written before cost was recorded. */
   estimated_cost_usd?: number | null;
   usage_by_provider?: readonly ProviderUsage[] | null;

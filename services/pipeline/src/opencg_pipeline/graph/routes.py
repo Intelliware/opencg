@@ -15,6 +15,8 @@ from opencg_shared import (
 from opencg_shared.metrics import observe_stage
 from pydantic import BaseModel, Field
 
+from opencg_pipeline import security
+
 router = APIRouter(prefix="/graph", tags=["graph"])
 
 _VALID_STATES = {"candidate", "confirmed", "tombstoned"}
@@ -184,7 +186,7 @@ async def _transition_concept(
         tenant=cfg.tenant,
         concept_id=concept_id,
         state=state,
-        actor=cfg.identity.principal,
+        actor=security.principal_of(request),
         reason=body.reason if body else None,
     )
     if row is None:
@@ -218,7 +220,7 @@ async def patch_concept(request: Request, concept_id: str, body: ConceptPatch) -
         row = await request.app.state.graph.patch_concept(
             tenant=cfg.tenant,
             concept_id=concept_id,
-            actor=cfg.identity.principal,
+            actor=security.principal_of(request),
             reason=body.reason,
             changes=body.model_dump(exclude_none=True, exclude={"reason"}),
         )
@@ -237,7 +239,7 @@ async def merge_concepts(request: Request, body: ConceptMerge) -> dict:
             tenant=cfg.tenant,
             into_id=body.into_id,
             from_ids=body.from_ids,
-            actor=cfg.identity.principal,
+            actor=security.principal_of(request),
             reason=body.reason,
         )
     except ValueError as exc:
@@ -255,7 +257,7 @@ async def _transition_edge(
         tenant=cfg.tenant,
         edge_id=edge_id,
         state=state,
-        actor=cfg.identity.principal,
+        actor=security.principal_of(request),
         reason=body.reason if body else None,
     )
     if row is None:
@@ -285,7 +287,7 @@ async def patch_edge(request: Request, edge_id: str, body: EdgePatch) -> dict:
         row = await request.app.state.graph.patch_edge(
             tenant=cfg.tenant,
             edge_id=edge_id,
-            actor=cfg.identity.principal,
+            actor=security.principal_of(request),
             reason=body.reason,
             changes=body.model_dump(exclude_none=True, exclude={"reason"}),
         )
@@ -302,7 +304,7 @@ async def create_vocabulary(request: Request, body: VocabCreate) -> dict:
     try:
         return await request.app.state.graph.create_vocabulary(
             tenant=cfg.tenant,
-            actor=cfg.identity.principal,
+            actor=security.principal_of(request),
             data=body.model_dump(),
         )
     except ValueError as exc:
@@ -319,7 +321,7 @@ async def patch_vocabulary(request: Request, name: str, body: VocabPatch) -> dic
     row = await request.app.state.graph.patch_vocabulary(
         tenant=cfg.tenant,
         name=name,
-        actor=cfg.identity.principal,
+        actor=security.principal_of(request),
         changes=body.model_dump(exclude_none=True),
     )
     if row is None:
@@ -333,7 +335,7 @@ async def deprecate_vocabulary(request: Request, name: str, body: ReasonBody | N
     row = await request.app.state.graph.deprecate_vocabulary(
         tenant=cfg.tenant,
         name=name,
-        actor=cfg.identity.principal,
+        actor=security.principal_of(request),
         reason=body.reason if body else None,
     )
     if row is None:

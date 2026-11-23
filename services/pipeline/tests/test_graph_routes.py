@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import FastAPI
+from authfakes import guarded_app
 from fastapi.testclient import TestClient
 from opencg_pipeline.graph import routes
 from opencg_shared import openCGConfig
@@ -138,7 +138,7 @@ class FakeGraph:
 
 
 def _client(graph: FakeGraph | None = None) -> tuple[TestClient, FakeGraph]:
-    app = FastAPI()
+    app = guarded_app()
     app.include_router(routes.router)
     app.state.cfg = openCGConfig()
     fake = graph or FakeGraph()

@@ -30,9 +30,11 @@ from opencg_shared import (
     record_stage_tokens,
     summarise_by_provider,
 )
+from opencg_shared.authz import PolicyUnavailable
 from opencg_shared.metrics import observe_stage
 from pydantic import BaseModel, Field
 
+from opencg_pipeline import security
 from opencg_pipeline.stages.hybrid_retrieval import drop_tombstoned, overfetch_limit
 
 router = APIRouter()
@@ -72,7 +74,12 @@ async def list_entities(
         limit=limit,
         offset=offset,
     )
-    items = [EntityListItem.model_validate(r) for r in rows]
+    # Entitlement: a row the caller may not retrieve is not listed either.
+    # `total` drops the hidden rows on this page; hidden rows on other pages
+    # still count (OPA decides per row, so it cannot be pushed into SQL).
+    allowed = await _allowed_ids(request, rows, tool="entity.list")
+    items = [EntityListItem.model_validate(r) for r in rows if str(r["entity_id"]) in allowed]
+    total -= len(rows) - len(items)
     return EntityListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
@@ -82,7 +89,10 @@ async def get_entity(request: Request, entity_id: str) -> Entity:
     row = await request.app.state.catalog.get_entity_with_lineage(
         tenant=cfg.tenant, entity_id=entity_id
     )
-    if row is None:
+    # An entity the caller may not retrieve is "not found", like a missing one.
+    if row is None or str(row["entity_id"]) not in await _allowed_ids(
+        request, [row], tool="entity.get"
+    ):
         raise HTTPException(status_code=404, detail="entity not found")
     # Normalise lineage children into EntityRef-shaped dicts the Pydantic model
     # can consume directly.
@@ -104,10 +114,62 @@ async def get_entity(request: Request, entity_id: str) -> Entity:
 @router.delete("/entities/{entity_id}", response_model=EntityListItem)
 async def tombstone_entity(request: Request, entity_id: str) -> EntityListItem:
     cfg = request.app.state.cfg
-    row = await request.app.state.catalog.tombstone(tenant=cfg.tenant, entity_id=entity_id)
+    row = await request.app.state.catalog.tombstone(
+        tenant=cfg.tenant, entity_id=entity_id, on_conn=security.insert_pending_access_row
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="entity not found")
     return EntityListItem.model_validate(row)
+
+
+async def _allowed_ids(
+    request: Request, candidates: list[dict], tool: str, correlation_id: str | None = None
+) -> set[str]:
+    """Entity ids the caller may see (one OPA call); 503 when policy is unavailable.
+
+    Every route that returns catalog content goes through this, not only
+    `/retrieve`: `/search/vector`, `GET /entities` and `GET /entities/{id}`.
+    """
+    if not candidates:
+        return set()
+    auth = security.auth_of(request)
+    try:
+        result = await request.app.state.opa.entitle(
+            identity=auth.identity,
+            auth_method=auth.auth_method,
+            request={
+                "tool": tool,
+                "correlation_id": correlation_id
+                or request.headers.get("x-correlation-id")
+                or f"req-{uuid.uuid4()}",
+            },
+            candidates=[
+                {
+                    "entity_id": str(c["entity_id"]),
+                    "classification": str(c.get("classification") or "internal"),
+                    "source": str(c.get("source") or ""),
+                    "source_uri": str(c.get("source_uri") or ""),
+                }
+                for c in candidates
+            ],
+        )
+    except PolicyUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail={"code": "policy_unavailable", "message": str(exc)}
+        ) from None
+    return {eid for eid, d in result.decisions.items() if d.allow}
+
+
+async def _entitled_hits(request: Request, hits: list, correlation_id: str) -> tuple[list, int]:
+    """Drop vector hits the caller may not retrieve."""
+    allowed = await _allowed_ids(
+        request,
+        [{**h.payload, "entity_id": h.entity_id} for h in hits],
+        tool="search.vector",
+        correlation_id=correlation_id,
+    )
+    kept = [h for h in hits if h.entity_id in allowed]
+    return kept, len(hits) - len(kept)
 
 
 @router.post("/search/vector", response_model=VectorSearchResponse)
@@ -130,6 +192,7 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         hits, tombstoned_filtered = await drop_tombstoned(
             hits, catalog=request.app.state.catalog, tenant=cfg.tenant, limit=payload.top_k
         )
+        hits, entitlement_filtered = await _entitled_hits(request, hits, correlation_id)
         latency_ms = int((time.perf_counter() - t0) * 1000)
         span.set_attribute("model", emb.model)
         span.set_attribute("provider", emb.provider)
@@ -137,6 +200,7 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
         span.set_attribute("latency_ms", latency_ms)
         span.set_attribute("hits", len(hits))
         span.set_attribute("tombstoned_filtered", tombstoned_filtered)
+        span.set_attribute("entitlement_filtered", entitlement_filtered)
     observe_stage("vector_search", time.perf_counter() - t0)
 
     cost = record_stage_tokens(
@@ -195,7 +259,10 @@ async def vector_search(request: Request, payload: VectorSearchRequest) -> Vecto
 async def _proxy(request: Request, method: str, path: str, json: Any | None = None) -> Any:
     client: httpx.AsyncClient = request.app.state.ingestion_client
     try:
-        resp = await client.request(method, path, json=json)
+        # Forward the caller's credentials: ingestion authorizes on its own (D9).
+        resp = await client.request(
+            method, path, json=json, headers=security.forward_headers(request)
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502, detail={"upstream": "unreachable", "error": str(exc)}
