@@ -42,7 +42,9 @@ services:
       - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__PROMETHEUS__HOST_PORT:-9090}:9090"
+      # Always loopback, whatever OPENCG__BIND_ADDRESS is: Prometheus has no
+      # authentication. Reach it from another machine through an SSH tunnel.
+      - "127.0.0.1:${OPENCG__PROMETHEUS__HOST_PORT:-9090}:9090"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
       interval: 5s
@@ -61,7 +63,9 @@ services:
       - tempo-data:/var/tempo
     ports:
       # Query API only; the OTLP receiver (4317) stays compose-internal.
-      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__TEMPO__HOST_PORT:-3200}:3200"
+      # Always loopback: Tempo has no authentication and its traces carry
+      # principal and tenant names.
+      - "127.0.0.1:${OPENCG__TEMPO__HOST_PORT:-3200}:3200"
     profiles: [dev]
 
   grafana:
@@ -87,8 +91,10 @@ services:
       tempo: { condition: service_started }
     ports:
       # 3030, not Grafana's usual 3000 (the admin UI) or 3001 (the e2e
-      # overlay's gated admin UI).
-      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__GRAFANA__HOST_PORT:-3030}:3000"
+      # overlay's gated admin UI). Loopback unless OPENCG__GRAFANA__BIND_ADDRESS
+      # says otherwise; OPENCG__BIND_ADDRESS does not apply here, and
+      # `make up-obs` refuses a non-loopback bind with the default password.
+      - "${OPENCG__GRAFANA__BIND_ADDRESS:-127.0.0.1}:${OPENCG__GRAFANA__HOST_PORT:-3030}:3000"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 5s
