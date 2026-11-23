@@ -56,6 +56,7 @@ async def ingest_documents(
     max_documents: int | None = None,
     max_chunks: int | None = None,
     run_id: str | None = None,
+    classification: str = "internal",
 ) -> IngestionSummary:
     """Ingest documents, optionally stopping at deterministic smoke/canary bounds.
 
@@ -130,7 +131,7 @@ async def ingest_documents(
                 title=doc.title,
                 body=doc.body,
                 content_hash=doc.content_hash,
-                classification="internal",
+                classification=classification,
                 metadata=doc.metadata,
             )
 
@@ -172,7 +173,7 @@ async def ingest_documents(
                     title=f"{doc.title}{title_suffix}",
                     body=ch.text,
                     content_hash=doc.content_hash,
-                    classification="internal",
+                    classification=classification,
                     metadata=meta,
                 )
                 try:
@@ -196,7 +197,7 @@ async def ingest_documents(
                     "source_uri": doc.source_uri,
                     "title": doc.title,
                     "text": ch.text,
-                    "classification": "internal",
+                    "classification": classification,
                     "chunk_index": ch_index,
                 }
                 if ch.metadata.get("symbol_id"):
@@ -379,6 +380,7 @@ async def run(
     max_documents: int | None = None,
     max_chunks: int | None = None,
     run_id: str | None = None,
+    classification: str = "internal",
 ) -> IngestionSummary:
     """Clone, walk and ingest one repository; counts the run per connector."""
     from opencg_ingestion.connectors.git import ingest_repo
@@ -393,6 +395,7 @@ async def run(
             max_documents=max_documents,
             max_chunks=max_chunks,
             run_id=run_id,
+            classification=classification,
         )
     except BaseException:
         record_ingestion_run(
@@ -415,6 +418,7 @@ def run_sync(
     *,
     max_documents: int | None = None,
     max_chunks: int | None = None,
+    classification: str = "internal",
 ) -> IngestionSummary:
     return asyncio.run(
         run(
@@ -422,5 +426,6 @@ def run_sync(
             cfg,
             max_documents=max_documents,
             max_chunks=max_chunks,
+            classification=classification,
         )
     )

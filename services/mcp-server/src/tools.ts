@@ -10,6 +10,7 @@ import type {
   TraverseRequest,
   TraverseResponse,
 } from "@opencg/shared";
+import type { Caller } from "./auth.js";
 import type { McpConfig } from "./config.js";
 import { PipelineRequestError, type PipelineClient } from "./pipeline-client.js";
 
@@ -113,6 +114,11 @@ export class UnknownToolError extends Error {
   code = "unknown_tool" as const;
 }
 
+/** The caller could not be authenticated (stdio without a valid token, pipeline 401). */
+export class UnauthenticatedError extends Error {
+  code = "unauthenticated" as const;
+}
+
 /** `opencg/retrieve_for_context` → `retrieve_for_context`; anything unadvertised → `unknown`. */
 export function toolLabel(name: string): string {
   return TOOL_DEFINITIONS.some((t) => t.name === name) ? name.replace(/^opencg\//, "") : "unknown";
@@ -129,6 +135,20 @@ export interface ToolCallContext {
   correlationId?: string;
   config: McpConfig;
   pipeline: PipelineClient;
+  /** Authenticated caller; absent → the stub identity (`none` mode, no forwarded token). */
+  caller?: Caller;
+}
+
+function callerOf(ctx: ToolCallContext): Caller {
+  return (
+    ctx.caller ?? {
+      principal: ctx.config.identity.principal,
+      roles: ctx.config.identity.roles,
+      tenant: ctx.config.tenant,
+      authMethod: "none",
+      authorization: null,
+    }
+  );
 }
 
 export async function callTool(
@@ -169,6 +189,7 @@ async function traverseGraph(
           : {}),
       },
       ctx.correlationId,
+      callerOf(ctx).authorization,
     );
   } catch (error) {
     if (error instanceof PipelineRequestError && error.statusCode === 404) {
@@ -186,18 +207,17 @@ async function retrieveForContext(
     throw new ToolValidationError("query is required and must be a non-empty string");
   }
   const correlation_id = ctx.correlationId || randomUUID();
+  const caller = callerOf(ctx);
+  // In `none` mode this is the stub identity the pipeline uses; with a
+  // forwarded token the pipeline ignores it and derives identity from the token.
   const req: RetrievalRequest = {
     correlation_id,
-    identity: {
-      principal: ctx.config.identity.principal,
-      roles: ctx.config.identity.roles,
-      tenant: ctx.config.tenant,
-    },
+    identity: { principal: caller.principal, roles: caller.roles, tenant: caller.tenant },
     tool: "retrieve_for_context",
     query: args.query,
     ...(args.top_k !== undefined ? { top_k: args.top_k } : {}),
     ...(args.token_budget !== undefined ? { token_budget: args.token_budget } : {}),
     ...(args.filters !== undefined ? { filters: args.filters } : {}),
   };
-  return await ctx.pipeline.retrieve(req);
+  return await ctx.pipeline.retrieve(req, caller.authorization);
 }

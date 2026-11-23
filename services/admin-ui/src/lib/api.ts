@@ -1,5 +1,6 @@
-// Pipeline-service client used by server components and a handful of client
-// actions. Shared types live in @opencg/shared.
+// Pipeline-service client used by server components and the /api/proxy/**
+// route handlers. Shared types live in @opencg/shared. Every call carries the
+// signed-in user's access token in `oidc` mode (design D5, D11).
 
 import type {
   ConnectorStatus,
@@ -16,10 +17,33 @@ import type {
   VectorSearchResponse,
 } from "@opencg/shared";
 
-const PIPELINE_URL =
+import { PipelineAuthError } from "@/lib/auth/errors";
+import { pageRead } from "@/lib/auth/interrupts";
+import { pipelineAuthHeaders } from "@/lib/auth/request";
+
+export const PIPELINE_URL =
   process.env.OPENCG__PIPELINE__URL || "http://pipeline:8000";
 
-const NO_STORE: RequestInit = { cache: "no-store" };
+/**
+ * Fetch from the pipeline with the signed-in user's access token (none in
+ * `none` mode). A 401 or 403 throws PipelineAuthError naming `action`:
+ * server-component reads turn it into a redirect or the permission-denied
+ * page (pageRead); `/api/proxy/**` route handlers turn it into JSON.
+ */
+export async function pipelineFetch(path: string, action: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(`${PIPELINE_URL}${path}`, {
+    cache: "no-store",
+    ...init,
+    headers: { ...(init.headers as Record<string, string> | undefined), ...(await pipelineAuthHeaders()) },
+  });
+  if (res.status === 401 || res.status === 403) throw new PipelineAuthError(res.status, action);
+  return res;
+}
+
+/** pipelineFetch for server components. */
+function readPage(path: string, action: string): Promise<Response> {
+  return pageRead(() => pipelineFetch(path, action));
+}
 
 export interface AuditRow {
   id: number;
@@ -46,14 +70,14 @@ export interface AuditRow {
 // --- Audits ----------------------------------------------------------------
 
 export async function listRecentAudits(limit = 50): Promise<AuditRow[]> {
-  const res = await fetch(`${PIPELINE_URL}/audit/recent?limit=${limit}`, NO_STORE);
+  const res = await readPage(`/audit/recent?limit=${limit}`, "view queries");
   if (!res.ok) return [];
   const body = (await res.json()) as { items: AuditRow[] };
   return body.items ?? [];
 }
 
 export async function getAudit(id: number): Promise<AuditRow | null> {
-  const res = await fetch(`${PIPELINE_URL}/audit/${id}`, NO_STORE);
+  const res = await readPage(`/audit/${id}`, "view this query");
   if (!res.ok) return null;
   return (await res.json()) as AuditRow;
 }
@@ -69,7 +93,7 @@ export interface ReadyzInfo {
 
 export async function getReadyz(): Promise<ReadyzInfo | null> {
   try {
-    const res = await fetch(`${PIPELINE_URL}/readyz`, NO_STORE);
+    const res = await fetch(`${PIPELINE_URL}/readyz`, { cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as ReadyzInfo;
   } catch {
@@ -94,7 +118,7 @@ export async function listEntities(
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
   }
-  const res = await fetch(`${PIPELINE_URL}/entities?${qs}`, NO_STORE);
+  const res = await readPage(`/entities?${qs}`, "view entities");
   if (!res.ok) {
     return { items: [] as EntityListItem[], total: 0, limit: params.limit ?? 50, offset: params.offset ?? 0 };
   }
@@ -102,16 +126,13 @@ export async function listEntities(
 }
 
 export async function getEntity(entityId: string): Promise<Entity | null> {
-  const res = await fetch(`${PIPELINE_URL}/entities/${entityId}`, NO_STORE);
+  const res = await readPage(`/entities/${entityId}`, "view this entity");
   if (!res.ok) return null;
   return (await res.json()) as Entity;
 }
 
 export async function tombstoneEntity(entityId: string): Promise<EntityListItem | null> {
-  const res = await fetch(`${PIPELINE_URL}/entities/${entityId}`, {
-    method: "DELETE",
-    cache: "no-store",
-  });
+  const res = await pipelineFetch(`/entities/${entityId}`, "tombstone this entity", { method: "DELETE" });
   if (!res.ok) return null;
   return (await res.json()) as EntityListItem;
 }
@@ -133,11 +154,10 @@ export type VectorSearchResult = VectorSearchResponse & {
 export async function vectorSearch(
   input: VectorSearchInput,
 ): Promise<VectorSearchResult | null> {
-  const res = await fetch(`${PIPELINE_URL}/search/vector`, {
+  const res = await pipelineFetch("/search/vector", "run a vector search", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
-    cache: "no-store",
   });
   if (!res.ok) return null;
   return (await res.json()) as VectorSearchResult;
@@ -146,13 +166,13 @@ export async function vectorSearch(
 // --- Ingestion (via pipeline proxy) ----------------------------------------
 
 export async function listConnectors(): Promise<ConnectorStatus[]> {
-  const res = await fetch(`${PIPELINE_URL}/ingestion/connectors`, NO_STORE);
+  const res = await readPage("/ingestion/connectors", "view connectors");
   if (!res.ok) return [];
   return (await res.json()) as ConnectorStatus[];
 }
 
 export async function listRecentRuns(): Promise<IngestionRun[]> {
-  const res = await fetch(`${PIPELINE_URL}/ingestion/runs/recent`, NO_STORE);
+  const res = await readPage("/ingestion/runs/recent", "view ingestion runs");
   if (!res.ok) return [];
   return (await res.json()) as IngestionRun[];
 }
@@ -166,13 +186,13 @@ export type RunGitResult =
 export async function runGit(repoUrl: string): Promise<RunGitResult> {
   let res: Response;
   try {
-    res = await fetch(`${PIPELINE_URL}/ingestion/git/run`, {
+    res = await pipelineFetch("/ingestion/git/run", "start an ingestion run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ repo_url: repoUrl }),
-      cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof PipelineAuthError) throw error;
     return { ok: false, status: 502, message: "Pipeline is unreachable." };
   }
   if (res.ok) return { ok: true, run: (await res.json()) as IngestionRun };
@@ -199,13 +219,13 @@ export async function listGraphConcepts(params: {
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") qs.set(key, String(value));
   }
-  const res = await fetch(`${PIPELINE_URL}/graph/concepts?${qs}`, NO_STORE);
+  const res = await readPage(`/graph/concepts?${qs}`, "view concepts");
   if (!res.ok) return { items: [], total: 0 };
   return (await res.json()) as { items: ConceptListItem[]; total: number };
 }
 
 export async function getGraphConcept(id: string): Promise<ConceptDetail | null> {
-  const res = await fetch(`${PIPELINE_URL}/graph/concepts/${id}`, NO_STORE);
+  const res = await readPage(`/graph/concepts/${id}`, "view this concept");
   if (!res.ok) return null;
   return (await res.json()) as ConceptDetail;
 }
@@ -224,7 +244,7 @@ export async function listGraphEdges(params: {
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") qs.set(key, String(value));
   }
-  const res = await fetch(`${PIPELINE_URL}/graph/edges?${qs}`, NO_STORE);
+  const res = await readPage(`/graph/edges?${qs}`, "view relationships");
   if (!res.ok) return { items: [], total: 0 };
   return (await res.json()) as { items: GraphEdgeItem[]; total: number };
 }
@@ -247,13 +267,13 @@ export function traverseQuery(params: TraverseParams): string {
 }
 
 export async function traverseGraph(params: TraverseParams): Promise<TraverseResponse> {
-  const res = await fetch(`${PIPELINE_URL}/graph/traverse?${traverseQuery(params)}`, NO_STORE);
+  const res = await readPage(`/graph/traverse?${traverseQuery(params)}`, "explore the graph");
   if (!res.ok) return { nodes: [], edges: [] };
   return (await res.json()) as TraverseResponse;
 }
 
 export async function listGraphVocabulary(): Promise<RelationshipType[]> {
-  const res = await fetch(`${PIPELINE_URL}/graph/vocab`, NO_STORE);
+  const res = await readPage("/graph/vocab", "view relationship types");
   if (!res.ok) return [];
   const body = (await res.json()) as { items: RelationshipType[] };
   return body.items;

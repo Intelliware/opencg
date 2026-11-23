@@ -49,6 +49,17 @@ class _Conn:
     async def execute(self, sql: str, *args: Any) -> None:
         self.calls.append(("execute", sql, args))
 
+    def transaction(self) -> _Tx:
+        return _Tx()
+
+
+class _Tx:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
 
 class _Pool:
     def __init__(self, conn: _Conn) -> None:

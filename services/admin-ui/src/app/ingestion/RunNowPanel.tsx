@@ -6,12 +6,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PermissionDenied } from "@/components/PermissionDenied";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
 export function RunNowPanel() {
   const router = useRouter();
   const [repoUrl, setRepoUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [denied, setDenied] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,12 +27,20 @@ export function RunNowPanel() {
     }
     setBusy(true);
     setError(null);
+    setDenied(null);
     const res = await fetch("/api/proxy/ingestion/git/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ repo_url: candidate }),
     });
     setBusy(false);
+    const auth = await checkProxyAuth(res, "start an ingestion run");
+    if (auth.kind === "signin") return;
+    if (auth.kind === "denied") {
+      setDenied(auth.action);
+      toast.error(auth.message);
+      return;
+    }
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       const message = body.error ?? `Run failed (${res.status})`;
@@ -66,6 +77,7 @@ export function RunNowPanel() {
             </span>
           ) : null}
         </form>
+        {denied ? <PermissionDenied action={denied} className="mt-3" /> : null}
       </CardContent>
     </Card>
   );

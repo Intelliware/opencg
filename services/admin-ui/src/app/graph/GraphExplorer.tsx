@@ -7,6 +7,7 @@ import { ConceptDetail } from "@/components/ConceptDetail";
 import { ConceptSearch } from "@/components/ConceptSearch";
 import { Button } from "@/components/ui/button";
 import { buildGraphModel, labelVisibility, type GraphNode, type TraverseData } from "./graph-model";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
 type FgNode = NodeObject<GraphNode>;
 type FgLink = LinkObject<GraphNode, { type: string; state: string }>;
@@ -35,12 +36,15 @@ async function fetchTraverse(
   const qs = new URLSearchParams({ concept_id: conceptId, depth: String(depth) });
   if (includeCandidates) qs.set("include_candidates", "true");
   const res = await fetch(`/api/proxy/graph/traverse?${qs}`, { cache: "no-store" });
+  const auth = await checkProxyAuth(res, "explore the graph");
+  if (auth.kind === "denied") throw new Error(auth.message);
   if (!res.ok) throw new Error(`traverse failed (${res.status})`);
   return (await res.json()) as TraverseData;
 }
 
 async function fetchDetail(conceptId: string): Promise<ConceptDetailType | null> {
   const res = await fetch(`/api/proxy/graph/concepts/${conceptId}`, { cache: "no-store" });
+  await checkProxyAuth(res, "view this concept");
   if (!res.ok) return null;
   return (await res.json()) as ConceptDetailType;
 }

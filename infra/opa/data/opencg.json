@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "revision": "e6bbccc8df011d66024300208f03e3bd196d60ec32ac9c467e77e1e1bbb56781"
+  },
+  "classifications": {
+    "public": ["reader", "admin"],
+    "internal": ["reader", "admin"]
+  },
+  "confidential_domains": ["legal"],
+  "actions": {
+    "retrieve": ["reader", "admin"],
+    "search.vector": ["reader", "admin"],
+    "audit.read": ["reader", "admin"],
+    "entity.read": ["reader", "admin"],
+    "graph.read": ["reader", "admin"],
+    "ingestion.read": ["reader", "admin"],
+    "entity.tombstone": ["admin"],
+    "graph.write": ["admin"],
+    "vocab.write": ["admin"],
+    "ingestion.run": ["admin"]
+  }
+}

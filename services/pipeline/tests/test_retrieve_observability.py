@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 import pytest
 import respx
+from authfakes import install
 from fastapi.testclient import TestClient
 from httpx import Response
 from opencg_pipeline import app as app_module
@@ -100,6 +101,7 @@ def _client(*, embeddings=None, audit=None) -> tuple[TestClient, _Audit]:
     app.state.vector = _Vector()
     app.state.embeddings = embeddings or _Embeddings()
     app.state.audit = a
+    install(app)
     return TestClient(app, raise_server_exceptions=False), a
 
 

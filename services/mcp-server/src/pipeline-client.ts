@@ -14,20 +14,41 @@ export class PipelineRequestError extends Error {
   ) {
     super(`pipeline ${statusCode}: ${responseBody}`);
   }
+
+  /** The `code` of a JSON error body (`{"code": …}` or FastAPI's `{"detail": {"code": …}}`). */
+  get errorCode(): string | null {
+    try {
+      const body = JSON.parse(this.responseBody) as Record<string, unknown>;
+      const detail = body.detail as Record<string, unknown> | undefined;
+      const code = body.code ?? (detail && typeof detail === "object" ? detail.code : undefined);
+      return typeof code === "string" ? code : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** `Authorization` header to forward, if any (the caller's exact value). */
+function authHeaders(authorization: string | null | undefined): Record<string, string> {
+  return authorization ? { authorization } : {};
 }
 
 // Every outgoing request carries the W3C `traceparent` / `tracestate` of the
 // active span (the `mcp.<tool>` span during a tool call), so the pipeline
-// continues the same trace.
+// continues the same trace. Tool calls also forward the caller's exact
+// `Authorization` value (JWT or `ock_` API key) so the pipeline derives the
+// identity itself (design D5); with no credential (`none` mode) the header is
+// omitted and the pipeline uses its stub identity.
 export class PipelineClient {
   constructor(private readonly baseUrl: string) {}
 
-  async retrieve(req: RetrievalRequest): Promise<RetrievalResponse> {
+  async retrieve(req: RetrievalRequest, authorization?: string | null): Promise<RetrievalResponse> {
     const url = `${this.baseUrl.replace(/\/$/, "")}/retrieve`;
     const res = await undiciRequest(url, {
       method: "POST",
       headers: {
         ...traceHeaders(),
+        ...authHeaders(authorization),
         "content-type": "application/json",
         "x-correlation-id": req.correlation_id,
       },
@@ -40,7 +61,11 @@ export class PipelineClient {
     return (await res.body.json()) as RetrievalResponse;
   }
 
-  async traverse(req: TraverseRequest, correlationId?: string): Promise<TraverseResponse> {
+  async traverse(
+    req: TraverseRequest,
+    correlationId?: string,
+    authorization?: string | null,
+  ): Promise<TraverseResponse> {
     const url = new URL(`${this.baseUrl.replace(/\/$/, "")}/graph/traverse`);
     url.searchParams.set("concept_id", req.concept_id);
     if (req.types?.length) {
@@ -55,7 +80,7 @@ export class PipelineClient {
     if (req.include_candidates !== undefined) {
       url.searchParams.set("include_candidates", String(req.include_candidates));
     }
-    const headers: Record<string, string> = traceHeaders();
+    const headers: Record<string, string> = { ...traceHeaders(), ...authHeaders(authorization) };
     if (correlationId) headers["x-correlation-id"] = correlationId;
     const res = await undiciRequest(url, { headers });
     if (res.statusCode >= 400) {
