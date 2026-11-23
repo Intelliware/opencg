@@ -47,6 +47,9 @@ JWKS_REFETCH_INTERVAL_SECONDS = 30.0
 API_KEY_PREFIX = "ock_"
 REMOVED_STOPGAP_VARIABLES = ("OPENCG__ADMIN_UI__PASSWORD", "OPENCG__MCP__OAUTH_PASSWORD")
 LOOPBACK_NAMES = {"localhost"}
+# Values `.env.example` ships; publicly known, so refused outside dev and test.
+DEV_ONLY_PREFIX = "dev-only-"
+DEV_ONLY_ENVIRONMENTS = ("dev", "test")
 MIGRATION_DOC = "docs/OPERATIONS.md, section 'Migrating from the shared-password gate'"
 
 FailureCode = Literal[
@@ -198,6 +201,14 @@ def startup_checks(settings: AuthSettings, env: Mapping[str, str] | None = None)
                 f"{var} is set, but the shared-secret stopgap was removed. "
                 f"Configure OIDC instead; see {MIGRATION_DOC}."
             )
+    if settings.environment not in DEV_ONLY_ENVIRONMENTS:
+        leaked = dev_only_variables(env)
+        if leaked:
+            raise ConfigError(
+                f"{', '.join(leaked)} still set to the publicly known `{DEV_ONLY_PREFIX}*` "
+                f"value from .env.example, but OPENCG__ENVIRONMENT={settings.environment!r}. "
+                "Set real secrets, or OPENCG__ENVIRONMENT=dev for local use."
+            )
     if settings.mode == "none" and not is_loopback(settings.bind_address):
         raise ConfigError(
             "OPENCG__AUTH__MODE=none (no authentication) is only allowed on loopback, "
@@ -221,6 +232,15 @@ def startup_checks(settings: AuthSettings, env: Mapping[str, str] | None = None)
             )
     if settings.mode == "none":
         log.warning("auth mode is 'none': requests run as the stub identity, unauthenticated")
+
+
+def dev_only_variables(env: Mapping[str, str]) -> list[str]:
+    """openCG/Keycloak variables still holding a `dev-only-*` value from .env.example."""
+    return sorted(
+        k
+        for k, v in env.items()
+        if k.startswith(("OPENCG__", "KC_")) and (v or "").strip().startswith(DEV_ONLY_PREFIX)
+    )
 
 
 def hash_api_key(raw_key: str) -> str:
@@ -310,7 +330,12 @@ def identity_from_claims(claims: Mapping[str, Any], settings: AuthSettings) -> I
     roles = tuple(str(r) for r in roles_value) if isinstance(roles_value, list) else ()
     tenant = settings.tenant
     if settings.tenant_claim:
-        tenant = str(_claim_path(claims, settings.tenant_claim) or settings.tenant)
+        # A configured tenant claim is required: falling back to the default
+        # tenant would put the caller in someone else's tenant.
+        value = _claim_path(claims, settings.tenant_claim)
+        if not isinstance(value, str) or not value:
+            raise AuthError("token_invalid", f"token has no {settings.tenant_claim!r} tenant claim")
+        tenant = value
     return IdentityContext(principal=str(principal), roles=roles, tenant=tenant)
 
 

@@ -98,6 +98,20 @@ export function parseApiKeys(raw: string, source = "OPENCG__AUTH__API_KEYS_FILE"
   });
 }
 
+export const DEV_ONLY_PREFIX = "dev-only-";
+
+/** openCG/Keycloak variables still holding a `dev-only-*` value from .env.example. */
+export function devOnlyVariables(env: Env): string[] {
+  return Object.entries(env)
+    .filter(
+      ([k, v]) =>
+        (k.startsWith("OPENCG__") || k.startsWith("KC_")) &&
+        (v ?? "").trim().startsWith(DEV_ONLY_PREFIX),
+    )
+    .map(([k]) => k)
+    .sort();
+}
+
 export function loadConfig(env: Env = process.env): McpConfig {
   // D12: removed stopgap settings must not silently turn a deployment open.
   if (str(env, "OPENCG__MCP__OAUTH_PASSWORD")) {
@@ -120,6 +134,19 @@ export function loadConfig(env: Env = process.env): McpConfig {
     );
   }
   const environment = rawEnv as Environment;
+
+  // Review fix: `.env.example` ships publicly known `dev-only-*` values; refuse them
+  // outside dev and test. Names only, never the values.
+  if (environment !== "dev" && environment !== "test") {
+    const leaked = devOnlyVariables(env);
+    if (leaked.length > 0) {
+      throw new ConfigError(
+        `${leaked.join(", ")} still set to the publicly known "${DEV_ONLY_PREFIX}*" value from ` +
+          `.env.example, but OPENCG__ENVIRONMENT=${environment}. Set real secrets, or ` +
+          `OPENCG__ENVIRONMENT=dev for local use.`,
+      );
+    }
+  }
 
   const bindAddress = str(env, "OPENCG__BIND_ADDRESS");
   if (authMode === "none" && bindAddress && !LOOPBACK.has(bindAddress.toLowerCase())) {

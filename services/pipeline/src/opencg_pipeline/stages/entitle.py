@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from opencg_shared import IdentityContext
-from opencg_shared.authz import EntitlementResult, OpaClient
+from opencg_shared.authz import EntitlementResult, OpaClient, PolicyUnavailable
 
 from opencg_pipeline.stages.hybrid_retrieval import Candidate
 
@@ -49,7 +49,10 @@ async def run(
     allowed: list[Candidate] = []
     denied: list[dict] = []
     for c in candidates:
-        decision = result.decisions[c.entity_id]
+        decision = result.decisions.get(c.entity_id)
+        if decision is None:
+            # OpaClient already checks this; never let a gap become a KeyError (500).
+            raise PolicyUnavailable(f"OPA gave no decision for candidate {c.entity_id}")
         if decision.allow:
             allowed.append(c)
         else:

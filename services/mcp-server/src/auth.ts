@@ -67,13 +67,19 @@ function constantTimeEqual(a: string, b: string): boolean {
   );
 }
 
-/** `realm_access.roles` → `claims.realm_access.roles`; a missing path or non-array → []. */
-export function readRoles(claims: JWTPayload, path: string): string[] {
+/** Dotted claim path (`realm_access.roles`); undefined when any part is missing. */
+function claimPath(claims: JWTPayload, path: string): unknown {
   let node: unknown = claims;
   for (const part of path.split(".")) {
-    if (node === null || typeof node !== "object") return [];
+    if (node === null || typeof node !== "object") return undefined;
     node = (node as Record<string, unknown>)[part];
   }
+  return node;
+}
+
+/** `realm_access.roles` → `claims.realm_access.roles`; a missing path or non-array → []. */
+export function readRoles(claims: JWTPayload, path: string): string[] {
+  const node = claimPath(claims, path);
   return Array.isArray(node) ? node.filter((r): r is string => typeof r === "string") : [];
 }
 
@@ -86,12 +92,14 @@ export function mapClaims(
   const principal =
     typeof named === "string" && named ? named : typeof claims.sub === "string" ? claims.sub : "";
   if (!principal) return null;
-  const tenantValue = oidc.tenantClaim ? claims[oidc.tenantClaim] : undefined;
-  return {
-    principal,
-    roles: readRoles(claims, oidc.rolesClaim),
-    tenant: typeof tenantValue === "string" && tenantValue ? tenantValue : defaultTenant,
-  };
+  let tenant = defaultTenant;
+  if (oidc.tenantClaim) {
+    // A configured tenant claim is required: no silent fall-back to the default tenant.
+    const tenantValue = claimPath(claims, oidc.tenantClaim);
+    if (typeof tenantValue !== "string" || !tenantValue) return null;
+    tenant = tenantValue;
+  }
+  return { principal, roles: readRoles(claims, oidc.rolesClaim), tenant };
 }
 
 class IssuerUnreachable extends Error {}

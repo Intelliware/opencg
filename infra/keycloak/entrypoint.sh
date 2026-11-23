@@ -54,6 +54,15 @@ dev | test)
 	mode=(start-dev)
 	;;
 staging | production)
+	# .env.example's dev-only-* values (admin password, DB password, client
+	# secrets) are public; refuse them here. Names only, never values.
+	leaked=()
+	while IFS= read -r name; do
+		case "$name" in OPENCG__* | KC_*) ;; *) continue ;; esac
+		case "${!name}" in dev-only-*) leaked+=("$name") ;; esac
+	done < <(compgen -e | sort)
+	[ "${#leaked[@]}" -eq 0 ] ||
+		die "${leaked[*]} still set to the publicly known dev-only-* value from .env.example, but OPENCG__ENVIRONMENT=$env. Set real secrets, or OPENCG__ENVIRONMENT=dev for local use."
 	# The smoke clients exist but are disabled; give them unguessable secrets
 	# so an unset placeholder never becomes a known one.
 	export OPENCG_KEYCLOAK_TEST_CLIENTS_ENABLED=false

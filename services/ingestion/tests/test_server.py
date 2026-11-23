@@ -197,3 +197,12 @@ def test_oidc_mode_requires_a_token(make_client):
     )
     assert client.get("/connectors").status_code == 401
     assert client.get("/healthz").status_code == 200
+
+
+def test_guard_runs_before_the_response():
+    # Review fix: the fallback access-audit write must finish before the response.
+    from opencg_ingestion import server
+
+    (dep,) = server.app.router.dependencies
+    assert dep.dependency is server.guard
+    assert dep.scope == "function"

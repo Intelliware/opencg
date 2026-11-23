@@ -8,7 +8,9 @@
 5. on allow of a state-changing action, makes an access audit row pending. Code
    that writes the action to Postgres (graph audit, tombstone) inserts it in the
    same transaction via `take_pending_access_row()`; anything still pending when
-   the handler succeeds is written on its own.
+   the handler succeeds is written on its own. Register the guard with
+   `Depends(guard, scope="function")` so that write happens before the response
+   is sent: a failed write is then a 500, never a 200 with no audit row.
 OPA failures fail closed with 503 `policy_unavailable`, except on `/retrieve`,
 which must still write an `outcome = "error"` audit row: there the guard flags
 `request.state.policy_unavailable` and the handler responds.

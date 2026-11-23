@@ -69,7 +69,7 @@ Then `make up-d` (it adds the `idp` profile itself). Keycloak is at <http://loca
 
 - **Realm `opencg`:** roles `admin`, `reader`, `legal`; the admin UI client `opencg-admin-ui`; service accounts `opencg-smoke` (admin, reader), `opencg-smoke-reader` (reader) and `opencg-smoke-legal` (reader, legal) for smoke, e2e and scripts.
 - **Dev users** `alice` (admin, reader), `bob` (reader) and `carol` (reader, legal) are imported **only** when `OPENCG__ENVIRONMENT` is `dev` or `test`. In `staging`/`production` the realm has no users and the smoke clients are disabled.
-- **Secrets:** every password and client secret comes from `.env`. The `dev-only-…` values in `.env.example` are public; change all of them before Keycloak is reachable from any network. Keycloak reads them at the first realm import, so changing them later needs `make down-v` or the Keycloak console.
+- **Secrets:** every password and client secret comes from `.env`. The `dev-only-…` values in `.env.example` are public; change all of them before Keycloak is reachable from any network. Outside `OPENCG__ENVIRONMENT=dev` or `test` (and an unset value means `production`), Keycloak and every openCG service **refuse to start** while any `OPENCG__*` or `KC_*` variable still starts with `dev-only-`; the message names the variables. Keycloak reads them at the first realm import, so changing them later needs `make down-v` or the Keycloak console.
 - **Why two URLs:** browsers reach Keycloak at the public issuer (`localhost:8380`), containers at `keycloak:8080`. Tokens always carry the public issuer; `INTERNAL_URL` is only where services fetch discovery and keys.
 - **Existing Postgres volume:** the `keycloak` database is created with a new volume. On an existing one, run `make db-apply SQL=015_keycloak_db.sh` once.
 
@@ -83,7 +83,7 @@ OPENCG__AUTH__OIDC__ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
 OPENCG__AUTH__OIDC__AUDIENCE=opencg            # the `aud` your IdP puts in access tokens
 OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM=preferred_username   # falls back to `sub`
 OPENCG__AUTH__OIDC__ROLES_CLAIM=roles          # dotted path: realm_access.roles, groups, ...
-OPENCG__AUTH__OIDC__TENANT_CLAIM=              # empty = OPENCG__TENANT
+OPENCG__AUTH__OIDC__TENANT_CLAIM=              # empty = OPENCG__TENANT; when set, tokens without it get 401
 OPENCG__ADMIN_UI__OIDC__CLIENT_ID=<admin UI client id>
 OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET=<secret>
 OPENCG__ADMIN_UI__PUBLIC_URL=https://opencg-admin.example.com
@@ -125,7 +125,7 @@ To label content, ingest with a classification: `opencg-ingest git <url> --class
 
 ### Access audit log
 
-`opencg.access_audit_log` records every **denied** request and every **allowed state-changing** action (`entity.tombstone`, `graph.write`, `vocab.write`, `ingestion.run`) with the principal, roles, auth method, action, resource, decision, reason and policy revision. Graph and tombstone rows are written in the same transaction as the change. Reads and failed authentications are not recorded there (they are in `audit_log` and the metrics). Like the other audit tables it is append-only: `UPDATE`, `DELETE` and `TRUNCATE` raise errors. On an existing volume, create it with `make db-apply SQL=070_access_audit.sql`; the pipeline's `/readyz` reports it missing until then.
+`opencg.access_audit_log` records every **denied** request and every **allowed state-changing** action (`entity.tombstone`, `graph.write`, `vocab.write`, `ingestion.run`) with the principal, roles, auth method, action, resource, decision, reason and policy revision. Graph and tombstone rows are written in the same transaction as the change. Reads and failed authentications are not recorded there (they are in `audit_log` and the metrics). Like the other audit tables it is append-only: `UPDATE`, `DELETE` and `TRUNCATE` raise errors. On an existing volume, create it with `make db-apply SQL=070_access_audit.sql`; the pipeline's and the ingestion service's `/readyz` report `503` until then, naming every missing table or column and the script that adds it (`060_audit_cost.sql` for the cost columns, `070_access_audit.sql` for this table and `audit_log.auth_method`).
 
 ### Migrating from the stopgaps
 
@@ -472,6 +472,7 @@ The three backends add about 700 MB of resident memory, measured on 2026-11-12 a
 Every retrieval writes a row to `opencg.audit_log` (range-partitioned on `created_at`; only the default partition exists until weekly partitions are pre-created; append-only enforced by trigger). The pipeline exposes two read endpoints:
 
 ```bash
+# Both are scoped to the caller's tenant: another tenant's row is a 404.
 curl http://localhost:8000/audit/recent?limit=50
 curl http://localhost:8000/audit/42
 ```
@@ -501,7 +502,7 @@ The admin UI's `/queries` page consumes these.
 ### Running stack
 
 - **`make up-d` hangs on `ollama` health** — first start has to download the embedding model. Tail `docker compose logs ollama` to watch the pull. If it hangs longer than ~5 minutes, check the host's network access to `registry.ollama.ai`.
-- **`pipeline /readyz` returns 503** — typically Postgres or Qdrant is still starting; `make ps` shows healthcheck state.
+- **`pipeline /readyz` returns 503** — typically Postgres or Qdrant is still starting; `make ps` shows healthcheck state. If the detail names a missing table or column, the volume predates an init script: run the `make db-apply SQL=…` it prints.
 - **Observability overlay problems** — see [Observability troubleshooting](#observability-troubleshooting).
 - **Embedding errors after a model swap** — Qdrant collections retain the old vector dimension. Run `make down-v` and re-ingest.
 - **`Authorization: Bearer …` showing up in local Ollama logs** — fine. Local Ollama ignores the header. If you don't want it, leave `OPENCG__OLLAMA__API_KEY` unset.

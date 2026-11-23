@@ -223,6 +223,16 @@ async def test_tenant_claim(issuer):
     assert result.identity.tenant == "acme"
 
 
+@pytest.mark.parametrize("claims", [{}, {"org": ""}, {"org": ["acme"]}])
+async def test_missing_configured_tenant_claim_rejected(issuer, claims):
+    # A configured tenant claim must be present; no silent fall-back to the default tenant.
+    _mock_issuer(issuer, [JWK1])
+    settings = _settings(OPENCG__AUTH__OIDC__TENANT_CLAIM="org")
+    with pytest.raises(AuthError) as exc:
+        await _auth(settings, f"Bearer {_token(claims)}")
+    assert exc.value.code == "token_invalid"
+
+
 # --- none mode and API keys ------------------------------------------------------------------
 
 
@@ -341,3 +351,28 @@ def test_http_token_refused_outside_dev():
 def test_dev_allows_keys(tmp_path):
     path, _ = _keys_file(tmp_path)
     _check({"OPENCG__ENVIRONMENT": "dev", "OPENCG__AUTH__API_KEYS_FILE": path})
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_dev_only_values_refused_outside_dev_and_test(environment):
+    env = {
+        "OPENCG__ENVIRONMENT": environment,
+        "OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET": "dev-only-admin-ui-secret",
+        "KC_DB_PASSWORD": "dev-only-keycloak-db",
+        "OPENCG__TENANT": "dev-only-is-fine-elsewhere-but-still-flagged",
+    }
+    with pytest.raises(ConfigError) as exc:
+        _check(env)
+    msg = str(exc.value)
+    assert "OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET" in msg and "KC_DB_PASSWORD" in msg
+    assert "dev-only-admin-ui-secret" not in msg  # never echo the value
+
+
+def test_dev_only_values_refused_when_environment_unset():
+    with pytest.raises(ConfigError, match="OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET"):
+        _check({"OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET": "dev-only-admin-ui-secret"})
+
+
+@pytest.mark.parametrize("environment", ["dev", "test"])
+def test_dev_only_values_allowed_in_dev_and_test(environment):
+    _check({"OPENCG__ENVIRONMENT": environment, "KC_DB_PASSWORD": "dev-only-keycloak-db"})

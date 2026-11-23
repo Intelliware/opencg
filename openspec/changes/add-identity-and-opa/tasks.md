@@ -120,3 +120,13 @@
 - [x] 13.4 `openspec validate add-identity-and-opa --strict`
 - [x] 13.5 Update `add-foundation` tasks 2.6, 4.3, 5.2, 5.7 and 12.1 to point at this change
 - [ ] 13.6 Commit, push, open the PR
+
+## 14. Review fixes (PR #6 review, 2026-11-23)
+
+- [x] 14.1 Refuse `dev-only-*` values in any `OPENCG__*` / `KC_*` variable outside `dev`/`test`: shared-py `startup_checks`, MCP `loadConfig`, admin UI `startupProblems`, Keycloak entrypoint; names only, never values
+- [x] 14.2 Observability overlay: Prometheus and Tempo always on `127.0.0.1`; Grafana on `OPENCG__GRAFANA__BIND_ADDRESS` (default loopback), `make up-obs` refuses a non-loopback Grafana with the default password (made on `add-observability-stack`, merged forward)
+- [x] 14.3 `/readyz` (pipeline and ingestion) checks every table and column from `060_audit_cost.sql` and `070_access_audit.sql` (`storage/schema.py`) and names the script to apply
+- [x] 14.4 Audit routes scoped to the caller's tenant; a configured tenant claim is required (401 `token_invalid` without it) in the pipeline and the MCP server
+- [x] 14.5 `entitle.run` raises `PolicyUnavailable` on a missing decision instead of a `KeyError`
+- [x] 14.6 Guard registered with `Depends(..., scope="function")` so the fallback access-audit write happens before the response; a failed write is a 500
+- [ ] 14.7 Confirm `stack` and `observability` pass once this PR targets `main`

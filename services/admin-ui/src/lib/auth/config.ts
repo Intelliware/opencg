@@ -9,6 +9,9 @@ const MODES: readonly AuthMode[] = ["none", "oidc"];
 const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
 const REMOVED_STOPGAPS = ["OPENCG__ADMIN_UI__PASSWORD", "OPENCG__MCP__OAUTH_PASSWORD"] as const;
 const MIGRATION_DOC = "the migration section of docs/OPERATIONS.md";
+// `.env.example` ships publicly known `dev-only-*` values; refused outside dev and test.
+const DEV_ONLY_PREFIX = "dev-only-";
+const DEV_ONLY_ENVIRONMENTS = new Set(["dev", "test"]);
 
 function value(env: Env, key: string): string | undefined {
   const raw = env[key];
@@ -80,6 +83,18 @@ export function startupProblems(env: Env = process.env): string[] {
       problems.push(
         `${key} is set, but the shared-password stopgap was removed. Unset it and follow the ` +
           `steps in ${MIGRATION_DOC}.`,
+      );
+    }
+  }
+  const environment = value(env, "OPENCG__ENVIRONMENT") ?? "production";
+  if (!DEV_ONLY_ENVIRONMENTS.has(environment)) {
+    const leaked = Object.keys(env)
+      .filter((k) => (k.startsWith("OPENCG__") || k.startsWith("KC_")) && (value(env, k) ?? "").startsWith(DEV_ONLY_PREFIX))
+      .sort();
+    if (leaked.length > 0) {
+      problems.push(
+        `${leaked.join(", ")} still set to the publicly known "${DEV_ONLY_PREFIX}*" value from .env.example, ` +
+          `but OPENCG__ENVIRONMENT=${environment}. Set real secrets, or OPENCG__ENVIRONMENT=dev for local use.`,
       );
     }
   }

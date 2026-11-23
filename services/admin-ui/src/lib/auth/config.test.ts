@@ -49,6 +49,18 @@ describe("startupProblems", () => {
     },
   );
 
+  it("refuses dev-only values outside dev and test, naming the variable but not the value", () => {
+    const [problem] = startupProblems({ ...OIDC, OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET: "dev-only-admin-ui-secret" });
+    expect(problem).toContain("OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET");
+    expect(problem).not.toContain("dev-only-admin-ui-secret");
+  });
+
+  it.each(["dev", "test"])("accepts dev-only values when OPENCG__ENVIRONMENT=%s", (environment) => {
+    expect(
+      startupProblems({ ...OIDC, OPENCG__ENVIRONMENT: environment, OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET: "dev-only-x" }),
+    ).toEqual([]);
+  });
+
   it("refuses an unknown mode", () => {
     expect(startupProblems({ OPENCG__AUTH__MODE: "open" })[0]).toContain("OPENCG__AUTH__MODE");
   });

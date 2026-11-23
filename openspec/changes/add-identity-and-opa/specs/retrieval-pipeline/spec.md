@@ -63,6 +63,24 @@ The default `opencg.admin` policy SHALL grant `reader` the actions `retrieve`, `
 - **WHEN** a principal with roles `["admin"]` calls `DELETE /entities/{id}` for a current-run entity
 - **THEN** the entity is tombstoned
 
+### Requirement: Audit routes scoped to the caller's tenant
+
+`GET /audit/recent` SHALL list only retrieval audit rows whose `tenant` is the caller's tenant, and `GET /audit/{id}` MUST respond `404` for a row of another tenant.
+
+#### Scenario: Another tenant's audit row is not found
+
+- **WHEN** a caller in tenant `acme` requests `GET /audit/{id}` for a row written in tenant `default`
+- **THEN** the response is `404`
+
+### Requirement: Readiness requires the current schema
+
+The pipeline's and the ingestion service's `/readyz` SHALL respond `503` when Postgres lacks a table or column that a later init script adds (`060_audit_cost.sql`, `070_access_audit.sql`), naming the missing objects and the script to apply.
+
+#### Scenario: Unapplied init script makes the service unready
+
+- **WHEN** an existing volume has `opencg.access_audit_log` but no `opencg.audit_log.auth_method` column
+- **THEN** the pipeline's `/readyz` responds `503` naming `opencg.audit_log.auth_method` and `070_access_audit.sql`
+
 ## MODIFIED Requirements
 
 ### Requirement: Vector search HTTP endpoint

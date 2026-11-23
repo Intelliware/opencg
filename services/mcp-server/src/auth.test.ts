@@ -41,6 +41,19 @@ describe("loadConfig startup checks", () => {
     );
   });
 
+  it("refuses dev-only values outside dev and test, naming the variable but not the value", () => {
+    const env = { OPENCG__ENVIRONMENT: "production", OPENCG__MCP__HTTP_TOKEN: "dev-only-token-value" };
+    expect(() => loadConfig(env)).toThrow(/OPENCG__MCP__HTTP_TOKEN/);
+    expect(() => loadConfig(env)).not.toThrow(/dev-only-token-value/);
+    expect(() => loadConfig({ OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET: "dev-only-x" })).toThrow(ConfigError);
+  });
+
+  it("accepts dev-only values in dev and test", () => {
+    for (const environment of ["dev", "test"]) {
+      expect(() => loadConfig({ OPENCG__ENVIRONMENT: environment, KC_DB_PASSWORD: "dev-only-x" })).not.toThrow();
+    }
+  });
+
   it("refuses unknown mode and environment values", () => {
     expect(() => loadConfig({ OPENCG__AUTH__MODE: "basic" })).toThrow(/OPENCG__AUTH__MODE/);
     expect(() => loadConfig({ OPENCG__ENVIRONMENT: "prod" })).toThrow(/OPENCG__ENVIRONMENT/);
@@ -129,6 +142,11 @@ describe("claim mapping", () => {
     expect(mapClaims({ preferred_username: "a", org: "acme" }, { ...oidc, tenantClaim: "org" }, "d")?.tenant).toBe(
       "acme",
     );
+  });
+  it("rejects a token without the configured tenant claim (no fall-back to the default)", () => {
+    for (const claims of [{ preferred_username: "a" }, { preferred_username: "a", org: "" }, { preferred_username: "a", org: ["x"] }]) {
+      expect(mapClaims(claims, { ...oidc, tenantClaim: "org" }, "default")).toBeNull();
+    }
   });
   it("gives no roles for a missing path", () => {
     expect(readRoles({}, "roles")).toEqual([]);

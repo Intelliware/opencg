@@ -90,7 +90,7 @@ A new append-only table `opencg.access_audit_log` SHALL record API authorization
 
 ### Requirement: What the access audit log records
 
-A row SHALL be written to `access_audit_log` for every `deny` and for every `allow` of a state-changing action (`entity.tombstone`, `graph.write`, `vocab.write`, `ingestion.run`), in the same transaction as the action when the action writes to Postgres. Allowed read actions and authentication failures MUST NOT be written to this table.
+A row SHALL be written to `access_audit_log` for every `deny` and for every `allow` of a state-changing action (`entity.tombstone`, `graph.write`, `vocab.write`, `ingestion.run`), in the same transaction as the action when the action writes to Postgres. Any other allow row MUST be written before the response is sent, so a failed write fails the request instead of returning success. Allowed read actions and authentication failures MUST NOT be written to this table.
 
 #### Scenario: Denied tombstone is recorded
 
@@ -102,6 +102,11 @@ A row SHALL be written to `access_audit_log` for every `deny` and for every `all
 
 - **WHEN** a principal `alice` with role `admin` promotes a candidate edge
 - **THEN** an `access_audit_log` row records `principal = "alice"`, `action = "graph.write"`, `decision = "allow"`
+
+#### Scenario: Failed audit write fails the request
+
+- **WHEN** an admin's allowed `vocab.write` succeeds but its `access_audit_log` insert fails
+- **THEN** the response is `500`, not `200`
 
 #### Scenario: Reads and bad tokens are not recorded
 

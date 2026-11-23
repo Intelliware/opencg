@@ -414,3 +414,92 @@ def test_ingestion_proxy_forwards_the_callers_token(bob_key):
     resp = TestClient(app).get("/ingestion/connectors", headers=headers)
     assert seen["authorization"] == headers["Authorization"]
     assert resp.status_code == 403  # upstream 403 passes through
+
+
+# --- review fixes (PR #6) ----------------------------------------------------------------
+
+
+class _TenantAuth:
+    """An authenticator whose caller belongs to tenant `acme`."""
+
+    def __init__(self) -> None:
+        self.settings = authenticator().settings
+
+    async def authenticate(self, header):
+        from opencg_shared import IdentityContext
+        from opencg_shared.auth import AuthenticatedIdentity
+
+        return AuthenticatedIdentity(
+            identity=IdentityContext(principal="ann", roles=("admin",), tenant="acme"),
+            auth_method="oidc",
+            bearer=header,
+        )
+
+
+class _AuditReads:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Any]] = []
+
+    async def list_recent(self, tenant: str, limit: int = 50):
+        self.calls.append(("list_recent", tenant))
+        return []
+
+    async def get(self, audit_id: int, *, tenant: str):
+        self.calls.append(("get", tenant))
+        return None  # another tenant's row is simply not found
+
+
+def test_audit_routes_are_scoped_to_the_callers_tenant():
+    app = app_module.app
+    app.state.cfg = openCGConfig()  # configured tenant: "default"
+    reads = _AuditReads()
+    app.state.audit = reads
+    install(app, auth=_TenantAuth())
+    client = TestClient(app, raise_server_exceptions=False)
+    assert client.get("/audit/recent").status_code == 200
+    assert client.get("/audit/7").status_code == 404
+    assert reads.calls == [("list_recent", "acme"), ("get", "acme")]
+
+
+def test_failed_fallback_access_audit_write_is_a_500_not_a_200():
+    class _FailingPool:
+        def acquire(self):
+            raise RuntimeError("postgres down")
+
+    app = guarded_app()
+
+    @app.post("/graph/vocab")
+    async def add_vocab() -> dict:  # state-changing, writes no audit row itself
+        return {"ok": True}
+
+    app.state.audit_pool = _FailingPool()
+    resp = TestClient(app, raise_server_exceptions=False).post("/graph/vocab")
+    assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_entitle_missing_decision_fails_closed():
+    from opencg_pipeline.stages import entitle
+    from opencg_shared.authz import Decision, EntitlementResult, PolicyUnavailable
+
+    class _PartialOpa:
+        async def entitle(self, **_kwargs):
+            return EntitlementResult(
+                decisions={"e1": Decision(allow=True, reason="")}, package="p", revision="r"
+            )
+
+    with pytest.raises(PolicyUnavailable):
+        await entitle.run(
+            opa=_PartialOpa(),
+            identity=None,
+            auth_method="oidc",
+            tool="retrieve_for_context",
+            correlation_id="c",
+            candidates=[_hit("e1", "internal"), _hit("e2", "internal")],
+        )
+
+
+def test_production_app_runs_the_guard_before_the_response():
+    (dep,) = app_module.app.router.dependencies
+    assert dep.dependency is security.guard
+    assert dep.scope == "function"

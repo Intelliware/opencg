@@ -104,12 +104,17 @@ A failed token validation SHALL return `401` with exactly one of the codes `toke
 
 ### Requirement: Principal and tenant claim mapping
 
-A validated token SHALL be mapped to the existing `IdentityContext` shape. `principal` MUST come from the claim named by `OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM` (default `preferred_username`), falling back to `sub` when that claim is absent. `tenant` MUST come from `OPENCG__AUTH__OIDC__TENANT_CLAIM` when set, and otherwise from the configured `tenant`.
+A validated token SHALL be mapped to the existing `IdentityContext` shape. `principal` MUST come from the claim named by `OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM` (default `preferred_username`), falling back to `sub` when that claim is absent. `tenant` MUST come from `OPENCG__AUTH__OIDC__TENANT_CLAIM` when set, and otherwise from the configured `tenant`. When the tenant claim is configured, a token without it (or with an empty or non-string value) MUST be rejected with `401 token_invalid`, never mapped to the configured tenant.
 
 #### Scenario: Missing principal claim falls back to sub
 
 - **WHEN** the token has no `preferred_username` claim and `sub = "8f2c…"`
 - **THEN** the identity's principal is `"8f2c…"`
+
+#### Scenario: Missing configured tenant claim is rejected
+
+- **WHEN** `OPENCG__AUTH__OIDC__TENANT_CLAIM=org` and a valid token has no `org` claim
+- **THEN** the response is `401` with `code = "token_invalid"`
 
 #### Scenario: Tenant comes from configuration by default
 
@@ -193,6 +198,20 @@ User passwords and client secrets for the dev realm SHALL come from `.env` and M
 
 - **WHEN** the bundled Keycloak starts with `OPENCG__ENVIRONMENT=production`
 - **THEN** the `opencg` realm has no users `alice`, `bob` or `carol`
+
+### Requirement: Development-only values refused outside dev and test
+
+Every openCG service and the bundled Keycloak SHALL exit non-zero at startup when `OPENCG__ENVIRONMENT` is not `dev` or `test` (unset counts as `production`) and any `OPENCG__*` or `KC_*` variable holds a value starting `dev-only-`, the publicly known values `.env.example` ships. The message MUST name each such variable and MUST NOT print its value.
+
+#### Scenario: Copied example secrets refused in production
+
+- **WHEN** the bundled Keycloak starts with `OPENCG__ENVIRONMENT=production` and `KC_BOOTSTRAP_ADMIN_PASSWORD=dev-only-keycloak-admin`
+- **THEN** it exits non-zero naming `KC_BOOTSTRAP_ADMIN_PASSWORD`, before importing the realm
+
+#### Scenario: Example secrets allowed in dev
+
+- **WHEN** the admin UI starts with `OPENCG__ENVIRONMENT=dev` and `OPENCG__ADMIN_UI__OIDC__CLIENT_SECRET=dev-only-admin-ui-secret`
+- **THEN** it starts
 
 ### Requirement: Deployment environment
 

@@ -38,6 +38,7 @@ from opencg_pipeline import admin_routes, security
 from opencg_pipeline.graph import routes as graph_routes
 from opencg_pipeline.providers import OllamaEmbeddings
 from opencg_pipeline.stages import assemble, entitle, hybrid_retrieval, identity
+from opencg_pipeline.storage import schema
 from opencg_pipeline.storage.audit import AuditStore
 from opencg_pipeline.storage.catalog import CatalogStore
 from opencg_pipeline.storage.graph import GraphStore
@@ -108,7 +109,11 @@ async def lifespan(app: FastAPI):
         await opa.close()
 
 
-app = FastAPI(title="opencg-pipeline", lifespan=lifespan, dependencies=[Depends(security.guard)])
+app = FastAPI(
+    title="opencg-pipeline",
+    lifespan=lifespan,
+    dependencies=[Depends(security.guard, scope="function")],
+)
 app.router.routes.append(Route("/metrics", metrics_app))
 
 
@@ -136,17 +141,11 @@ async def readyz() -> dict:
     try:
         async with app.state.catalog._require_pool().acquire() as conn:  # type: ignore[attr-defined]
             await conn.execute("SELECT 1")
-            has_access_log = await conn.fetchval(
-                "SELECT to_regclass('opencg.access_audit_log') IS NOT NULL"
-            )
+            missing = await schema.missing_schema(conn)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"postgres: {exc}") from exc
-    if not has_access_log:
-        raise HTTPException(
-            status_code=503,
-            detail="postgres: opencg.access_audit_log is missing; apply "
-            "infra/postgres/init/070_access_audit.sql (make db-apply SQL=...)",
-        )
+    if missing:
+        raise HTTPException(status_code=503, detail=schema.describe(missing))
     if not await app.state.opa.ready():
         raise HTTPException(status_code=503, detail="opa: not reachable")
     try:
@@ -422,15 +421,17 @@ async def _write_error_audit(
 
 
 @app.get("/audit/recent")
-async def audit_recent(limit: int = 50) -> dict:
-    cfg: openCGConfig = app.state.cfg
-    rows = await app.state.audit.list_recent(cfg.tenant, limit=limit)
+async def audit_recent(request: Request, limit: int = 50) -> dict:
+    # Scoped to the caller's tenant (from the token's tenant claim when configured).
+    tenant = security.auth_of(request).identity.tenant
+    rows = await app.state.audit.list_recent(tenant, limit=limit)
     return {"items": rows}
 
 
 @app.get("/audit/{audit_id}")
-async def audit_detail(audit_id: int) -> dict:
-    row = await app.state.audit.get(audit_id)
+async def audit_detail(audit_id: int, request: Request) -> dict:
+    tenant = security.auth_of(request).identity.tenant
+    row = await app.state.audit.get(audit_id, tenant=tenant)
     if not row:
         raise HTTPException(status_code=404, detail="not found")
     return row

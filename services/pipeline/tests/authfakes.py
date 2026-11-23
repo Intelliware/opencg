@@ -12,6 +12,6 @@ __all__ = ["FakeAuditPool", "FakeOpa", "authenticator", "guarded_app", "install"
 
 def guarded_app(*, opa: FakeOpa | None = None, auth: Authenticator | None = None) -> FastAPI:
     """A FastAPI app with the production guard and test doubles installed."""
-    app = FastAPI(dependencies=[Depends(security.guard)])
+    app = FastAPI(dependencies=[Depends(security.guard, scope="function")])
     install(app, opa=opa, auth=auth)
     return app

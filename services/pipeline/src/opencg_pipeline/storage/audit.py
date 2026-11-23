@@ -112,7 +112,8 @@ class AuditStore:
             rows = await conn.fetch(sql, tenant, limit)
         return [_cost_fields(dict(r)) for r in rows]
 
-    async def get(self, audit_id: int) -> dict[str, Any] | None:
+    async def get(self, audit_id: int, *, tenant: str) -> dict[str, Any] | None:
+        """One audit row, only if it belongs to `tenant` (another tenant's row is not found)."""
         pool = self._pool_required()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -125,8 +126,9 @@ class AuditStore:
                           final_context_hash, tokens_in, tokens_out,
                           latency_ms, outcome, error_code, legal_hold,
                           estimated_cost_usd, usage_by_provider, auth_method
-                   FROM opencg.audit_log WHERE id = $1""",
+                   FROM opencg.audit_log WHERE id = $1 AND tenant = $2""",
                 audit_id,
+                tenant,
             )
         return _cost_fields(dict(row)) if row else None
 

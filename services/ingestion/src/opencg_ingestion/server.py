@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from opencg_pipeline.providers import OllamaEmbeddings
 from opencg_pipeline.security import make_guard, principal_of
+from opencg_pipeline.storage import schema
 from opencg_pipeline.storage.catalog import CatalogStore
 from opencg_shared import (
     ConnectorStatus,
@@ -87,7 +88,9 @@ ROUTE_ACTIONS = {
 }
 guard = make_guard("ingestion", ROUTE_ACTIONS)
 
-app = FastAPI(title="opencg-ingestion", lifespan=lifespan, dependencies=[Depends(guard)])
+app = FastAPI(
+    title="opencg-ingestion", lifespan=lifespan, dependencies=[Depends(guard, scope="function")]
+)
 app.router.routes.append(Route("/metrics", metrics_app))
 
 
@@ -111,8 +114,11 @@ async def readyz() -> dict:
     try:
         async with app.state.catalog._require_pool().acquire() as conn:  # type: ignore[attr-defined]
             await conn.execute("SELECT 1")
+            missing = await schema.missing_schema(conn)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"postgres: {exc}") from exc
+    if missing:
+        raise HTTPException(status_code=503, detail=schema.describe(missing))
     # Qdrant
     qdrant = AsyncQdrantClient(url=cfg.qdrant.url)
     try:
