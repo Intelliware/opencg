@@ -7,10 +7,13 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 ### Breaking
 
 - **Removed the shared-secret stopgaps** (`add-identity-and-opa`): the admin UI password gate (`OPENCG__ADMIN_UI__PASSWORD`, `/login`, `/api/auth/login`, `/api/auth/logout`) and the MCP server's built-in OAuth server (`OPENCG__MCP__OAUTH_PASSWORD`, `/authorize`, `/token`, `/register`, `/revoke`, `/.well-known/oauth-authorization-server`, `POST /oauth/approve`). Services **refuse to start** if either variable is set. See `docs/OPERATIONS.md` "Migrating from the stopgaps".
-- `OPENCG__MCP__HTTP_TOKEN` is accepted only when `OPENCG__ENVIRONMENT=dev`. An **unset `OPENCG__ENVIRONMENT` means `production`**; `.env.example` and compose set `dev`.
+- `OPENCG__MCP__HTTP_TOKEN` is accepted only when `OPENCG__ENVIRONMENT=dev`. An **unset `OPENCG__ENVIRONMENT` means `production`**, in the services and in compose; `.env.example` sets `dev`. Add `OPENCG__ENVIRONMENT=dev` to an existing local `.env` that lacks it.
 - `none` auth mode refuses to start when `OPENCG__BIND_ADDRESS` is not a loopback address.
 - Outside `OPENCG__ENVIRONMENT=dev` or `test`, every service and the bundled Keycloak refuse to start while any `OPENCG__*` or `KC_*` variable still holds a `dev-only-*` value from `.env.example`.
 - With `OPENCG__AUTH__OIDC__TENANT_CLAIM` set, a token without that claim gets `401 token_invalid` instead of the default tenant. `/audit/recent` and `/audit/{id}` are scoped to the caller's tenant.
+- `GET /entities` and `GET /entities/{id}` apply retrieval entitlement: rows the caller may not retrieve are not listed, and a denied entity is a `404`.
+- OPA's REST API accepts only decision queries and `/health` (`--authorization=basic`, `infra/opa/policies/system_authz.rego`), and its debugging port is always loopback.
+- The admin UI refuses cross-origin `POST`/`PUT`/`PATCH`/`DELETE` requests to `/api/**` (`403 cross_origin`).
 - The pipeline's and ingestion service's `/readyz` return `503` until `060_audit_cost.sql` and `070_access_audit.sql` are applied to an existing volume.
 - Retrieval entitlement moved from a role map in the pipeline to OPA. `confidential:<domain>` content now needs the `<domain>` role, and unknown classifications are denied.
 

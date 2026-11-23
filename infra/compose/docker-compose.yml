@@ -8,16 +8,17 @@ name: opencg
 #
 # Identity and policy (add-identity-and-opa): every openCG service gets the same
 # auth variables from the anchor below, so they cannot disagree. Defaults keep
-# the open local mode (OPENCG__AUTH__MODE=none, OPENCG__ENVIRONMENT=dev). The
+# the open local mode (OPENCG__AUTH__MODE=none); .env.example sets
+# OPENCG__ENVIRONMENT=dev, and an unset value means production here too. The
 # bundled Keycloak is in the `idp` profile; the Makefile adds that profile when
 # OPENCG__AUTH__MODE=oidc points at it. OPA is in `dev` and always runs.
 
 # Auth + policy settings shared by pipeline, ingestion, mcp-server and admin-ui.
 # A key with no value is passed through only when set in the shell or .env.
 x-opencg-auth-env: &opencg-auth-env
-  # The compose stack is a dev stack; the services themselves treat an unset
-  # OPENCG__ENVIRONMENT as production.
-  OPENCG__ENVIRONMENT: ${OPENCG__ENVIRONMENT:-dev}
+  # Unset means production, as in every service: a forgotten line must fail
+  # safe (no dev users, API keys or dev-only secrets). .env.example sets dev.
+  OPENCG__ENVIRONMENT: ${OPENCG__ENVIRONMENT:-production}
   # Each service refuses `none` mode when this is not a loopback address.
   OPENCG__BIND_ADDRESS: ${OPENCG__BIND_ADDRESS:-127.0.0.1}
   OPENCG__AUTH__MODE: ${OPENCG__AUTH__MODE:-none}
@@ -113,6 +114,9 @@ services:
       - run
       - --server
       - --addr=0.0.0.0:8181
+      # policies/system_authz.rego: only decision queries and /health; OPA's
+      # API would otherwise accept writes that rewrite the policy data.
+      - --authorization=basic
       - --log-level=info
       - /policy/policies
       - /policy/data
@@ -120,7 +124,8 @@ services:
       - ../opa/policies:/policy/policies:ro
       - ../opa/data:/policy/data:ro
     ports:
-      - "${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__OPA__HOST_PORT:-8281}:8181"
+      # Debugging only, and always loopback whatever OPENCG__BIND_ADDRESS is.
+      - "127.0.0.1:${OPENCG__OPA__HOST_PORT:-8281}:8181"
     healthcheck:
       # The image has no shell or curl; OPA's own http.send probes /health.
       test:
@@ -145,7 +150,7 @@ services:
     image: quay.io/keycloak/keycloak:26.8.1-1
     entrypoint: ["/bin/bash", "/opt/opencg/keycloak/entrypoint.sh"]
     environment:
-      OPENCG__ENVIRONMENT: ${OPENCG__ENVIRONMENT:-dev}
+      OPENCG__ENVIRONMENT: ${OPENCG__ENVIRONMENT:-production}
       KC_DB: postgres
       KC_DB_URL: ${OPENCG__KEYCLOAK__DB_URL:-jdbc:postgresql://postgres:5432/keycloak}
       KC_DB_USERNAME: ${OPENCG__KEYCLOAK__DB_USER:-keycloak}

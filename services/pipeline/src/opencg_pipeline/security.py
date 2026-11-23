@@ -166,7 +166,7 @@ def make_guard(
         except AuthError as exc:
             record_auth_failure(service, exc.code)
             log.info("authentication failed on %s: %s", path, exc.code)
-            raise unauthorized(exc, authenticator.settings) from None
+            raise unauthorized(exc) from None
         request.state.auth = auth
 
         action = route_actions.get((request.method, path))

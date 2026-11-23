@@ -32,6 +32,11 @@ async def run(
     correlation_id: str,
     candidates: list[Candidate],
 ) -> EntitleOutcome:
+    if not candidates:
+        # Nothing to decide: no OPA call, so an empty search still answers while OPA is down.
+        return EntitleOutcome(
+            allowed=[], denied=[], result=EntitlementResult({}, "opencg.entitlement", "")
+        )
     result = await opa.entitle(
         identity=identity,
         auth_method=auth_method,

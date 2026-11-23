@@ -503,3 +503,20 @@ def test_production_app_runs_the_guard_before_the_response():
     (dep,) = app_module.app.router.dependencies
     assert dep.dependency is security.guard
     assert dep.scope == "function"
+
+
+@pytest.mark.asyncio
+async def test_entitle_skips_opa_when_there_are_no_candidates():
+    from opencg_pipeline.stages import entitle
+
+    opa = FakeOpa(entitle_unavailable=True)
+    out = await entitle.run(
+        opa=opa,
+        identity=None,
+        auth_method="oidc",
+        tool="retrieve_for_context",
+        correlation_id="c",
+        candidates=[],
+    )
+    assert out.allowed == [] and out.denied == []
+    assert opa.entitle_calls == []

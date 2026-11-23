@@ -5,6 +5,10 @@
 // - `oidc` mode: pages without a valid session redirect to
 //   /api/auth/signin?next=<path>; /api/** without a session gets 401 JSON.
 //   /api/auth/*, /api/healthz and static assets stay open.
+// - Both modes: a state-changing request to /api/** from another origin is
+//   refused (403 cross_origin). The session cookie is SameSite=Lax, which still
+//   lets a sibling subdomain or another localhost port send it; in `none` mode
+//   there is no cookie at all, so any web page could otherwise post here.
 import { type NextRequest, NextResponse } from "next/server";
 
 import { authMode, oidcSettings } from "@/lib/auth/config";
@@ -15,8 +19,42 @@ export function isOpenPath(pathname: string): boolean {
   return pathname === "/api/healthz" || pathname === "/api/auth" || pathname.startsWith("/api/auth/");
 }
 
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * True for a browser request that changes state from a page on another origin.
+ * Browsers send Sec-Fetch-Site (or at least Origin) on such requests; a client
+ * that sends neither (curl, server-side code) is not a cross-site attacker.
+ */
+export function isCrossOriginWrite(req: NextRequest): boolean {
+  const { pathname } = req.nextUrl;
+  if (!UNSAFE_METHODS.has(req.method) || !(pathname === "/api" || pathname.startsWith("/api/"))) {
+    return false;
+  }
+  const site = req.headers.get("sec-fetch-site");
+  if (site) return site !== "same-origin" && site !== "none";
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return true; // "null" (sandboxed iframe, file://) or garbage
+  }
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (host && originHost === host) return false;
+  const publicUrl = process.env.OPENCG__ADMIN_UI__PUBLIC_URL;
+  return !(publicUrl && originHost === new URL(publicUrl).host);
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+  if (isCrossOriginWrite(req)) {
+    return NextResponse.json(
+      { error: "cross_origin", message: "Requests that change data must come from the admin UI itself." },
+      { status: 403 },
+    );
+  }
   if (authMode() === "none" || isOpenPath(pathname)) return NextResponse.next();
 
   const isApi = pathname === "/api" || pathname.startsWith("/api/");

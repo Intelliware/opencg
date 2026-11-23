@@ -22,7 +22,7 @@ In `oidc` mode, the admin UI SHALL require a signed-in session for every page an
 
 ### Requirement: Server-side session
 
-The admin UI session SHALL be stored server-side in Valkey and referenced by a random identifier in an HttpOnly, SameSite=Lax cookie that is Secure when the request (or `x-forwarded-proto`) is HTTPS. Access, refresh and ID tokens MUST NOT reach the browser. The session MUST refresh the access token before it expires and MUST end when refresh fails.
+The admin UI session SHALL be stored server-side in Valkey and referenced by a random identifier in an HttpOnly, SameSite=Lax cookie that is Secure when the request (or `x-forwarded-proto`) is HTTPS. Access, refresh and ID tokens MUST NOT reach the browser. The session MUST refresh the access token before it expires. It MUST end when the IdP rejects the refresh token (`invalid_grant`), unless the stored session already holds a newer refresh token (another request or instance refreshed first), which MUST then be used. When the IdP is unreachable, the session MUST be kept while its access token is valid, and requests MUST fail with `503` after that without ending the session.
 
 #### Scenario: Tokens stay on the server
 
@@ -33,6 +33,25 @@ The admin UI session SHALL be stored server-side in Valkey and referenced by a r
 
 - **WHEN** the refresh token has been revoked at the IdP and the access token expires
 - **THEN** the next page request redirects to sign-in
+
+#### Scenario: Concurrent refresh with rotating refresh tokens
+
+- **WHEN** two admin UI instances refresh the same session at once and the IdP rotates refresh tokens
+- **THEN** the user stays signed in
+
+#### Scenario: Brief IdP outage
+
+- **WHEN** the IdP is unreachable while a user's access token is still valid
+- **THEN** the user's requests keep working and the session is not ended
+
+### Requirement: Cross-origin writes refused
+
+In both auth modes, the admin UI SHALL refuse a `POST`, `PUT`, `PATCH` or `DELETE` to `/api/**` (including sign-out) with `403` and `error = "cross_origin"` when the browser reports it as not same-origin (`Sec-Fetch-Site`), or, without that header, when its `Origin` is neither the request's host nor `OPENCG__ADMIN_UI__PUBLIC_URL`.
+
+#### Scenario: Sibling-subdomain page cannot start ingestion
+
+- **WHEN** a page on another subdomain of the same site posts to `/api/proxy/ingestion/git/run` with the user's cookie
+- **THEN** the response is `403` with `error = "cross_origin"` and no run starts
 
 ### Requirement: Sign-out and signed-in user display
 

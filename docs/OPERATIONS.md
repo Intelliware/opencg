@@ -52,7 +52,7 @@ openCG has two auth modes, set once for every service with `OPENCG__AUTH__MODE`:
 
 Policy runs in **both** modes: OPA decides what each identity may see and do, so turning on OIDC changes who you are, not which rules apply.
 
-`OPENCG__ENVIRONMENT` (`dev`, `test`, `staging` or `production`) names the deployment. An **unset value means `production`**. `.env.example` and the compose stack set `dev`.
+`OPENCG__ENVIRONMENT` (`dev`, `test`, `staging` or `production`) names the deployment. An **unset value means `production`**, in every service and in the compose stack; `.env.example` sets `dev`. An `.env` written from scratch without this line therefore gets no dev users, no API keys and no dev-only secrets.
 
 ### Using the bundled Keycloak
 
@@ -118,6 +118,10 @@ The `opa` service evaluates two packages from `infra/opa/` (mounted read-only):
 
 - `opencg.entitlement`: one decision per retrieval candidate. `public` and `internal` need `reader` or `admin`; `confidential:<domain>` needs the role `<domain>` and the domain must be listed in `confidential_domains` in `infra/opa/data/opencg.json`; anything else is denied as `unknown_classification`. Denied candidates are removed before the token budget.
 - `opencg.admin`: one decision per API action (`retrieve`, `search.vector`, `audit.read`, `entity.read`, `entity.tombstone`, `graph.read`, `graph.write`, `vocab.write`, `ingestion.read`, `ingestion.run`). `reader` gets `retrieve`, `search.vector` and every `*.read`; `admin` gets everything; unknown actions are denied.
+
+Entitlement applies wherever catalog content leaves the pipeline: `/retrieve`, `/search/vector`, `GET /entities` (denied rows are not listed) and `GET /entities/{id}` (a denied entity is a `404`, like a missing one).
+
+OPA's own REST API is locked down: OPA runs with `--authorization=basic` and `infra/opa/policies/system_authz.rego` allows only `POST /v1/data/opencg/...` decision queries and `GET /health`. Any attempt to change policy or data through the API (`PUT /v1/data/...`, `PUT /v1/policies/...`) gets `401`. The debugging port (`OPENCG__OPA__HOST_PORT`, default 8281) is always bound to `127.0.0.1`, whatever `OPENCG__BIND_ADDRESS` is.
 
 To change the rules, edit `infra/opa/policies/*.rego` or `infra/opa/data/opencg.json`, run `make opa-revision` (the revision is a hash of the policy and data files and is written into every audit decision), then `make opa-test`, and restart `opa`. If OPA is down, slow (`OPENCG__OPA__TIMEOUT_MS`, default 2000) or returns a partial answer, requests are **denied**: `/retrieve` returns `503 policy_unavailable` and still writes an `outcome = "error"` audit row.
 

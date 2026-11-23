@@ -130,3 +130,16 @@
 - [x] 14.5 `entitle.run` raises `PolicyUnavailable` on a missing decision instead of a `KeyError`
 - [x] 14.6 Guard registered with `Depends(..., scope="function")` so the fallback access-audit write happens before the response; a failed write is a 500
 - [ ] 14.7 Confirm `stack` and `observability` pass once this PR targets `main`
+
+## 15. Ponytail review fixes (2026-11-23)
+
+- [x] 15.1 `GET /entities` and `GET /entities/{id}` apply `opencg.entitlement` (shared `_allowed_ids` with `/search/vector`); a denied entity is a 404
+- [x] 15.2 OPA: `--authorization=basic` with `policies/system_authz.rego` (decision queries and `/health` only) plus tests; host port always `127.0.0.1`
+- [x] 15.3 Compose defaults `OPENCG__ENVIRONMENT` to `production`, matching the services
+- [x] 15.4 Admin UI refuses cross-origin writes to `/api/**` in both modes (`isCrossOriginWrite` in `proxy.ts`)
+- [x] 15.5 Admin UI refresh: keep a session another instance already refreshed; end it only on `invalid_grant`; keep it through IdP outages while the access token is valid
+- [x] 15.6 Issuer compared exactly as configured (trailing slash kept); unused `make_auth_dependency` / `auth.OPEN_PATHS` removed
+- [x] 15.7 `entitle.run` skips OPA for an empty candidate list
+- [ ] 15.8 Follow-up change: Keycloak-only secrets in their own env file instead of the shared `.env` every service loads
+- [ ] 15.9 Follow-up change: anonymous dynamic client registration off (or capped and documented) in staging/production
+- [ ] 15.10 Follow-up: check whether `/graph/*` exposes concepts extracted from confidential entities to readers

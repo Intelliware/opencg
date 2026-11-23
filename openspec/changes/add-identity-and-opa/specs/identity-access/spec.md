@@ -62,6 +62,11 @@ A service SHALL exit non-zero when `OPENCG__ADMIN_UI__PASSWORD` or `OPENCG__MCP_
 
 In `oidc` mode, every service SHALL validate access tokens as signed JWTs from one configured issuer. It MUST check the signature against the issuer's JWKS, that `iss` equals `OPENCG__AUTH__OIDC__ISSUER`, that `aud` contains `OPENCG__AUTH__OIDC__AUDIENCE`, and that `exp` and `nbf` hold with at most 60 seconds of clock skew. Tokens signed with `none` or an HMAC algorithm MUST be rejected.
 
+#### Scenario: Issuer with a trailing slash
+
+- **WHEN** `OPENCG__AUTH__OIDC__ISSUER` is `https://tenant.example.auth0.com/` and a token's `iss` is the same string
+- **THEN** the token is accepted
+
 #### Scenario: Expired token is rejected
 
 - **WHEN** a client presents a correctly signed token whose `exp` is more than 60 seconds in the past
@@ -215,12 +220,17 @@ Every openCG service and the bundled Keycloak SHALL exit non-zero at startup whe
 
 ### Requirement: Deployment environment
 
-Every openCG service SHALL read `OPENCG__ENVIRONMENT`, one of `dev`, `test`, `staging` or `production`. An unset value MUST be treated as `production`, and an unknown value MUST stop the service from starting. `.env.example` SHALL set `dev`.
+Every openCG service SHALL read `OPENCG__ENVIRONMENT`, one of `dev`, `test`, `staging` or `production`. An unset value MUST be treated as `production`, by the services and by the compose stack's defaults alike, and an unknown value MUST stop the service from starting. `.env.example` SHALL set `dev`.
 
 #### Scenario: Unset environment fails safe
 
 - **WHEN** a service starts without `OPENCG__ENVIRONMENT`
 - **THEN** it behaves as `production`, including refusing API keys
+
+#### Scenario: Compose does not default to dev
+
+- **WHEN** `.env` has no `OPENCG__ENVIRONMENT` line and the stack starts with the bundled Keycloak
+- **THEN** every service and Keycloak run as `production`: no dev users, smoke clients disabled
 
 ### Requirement: API keys only in the dev environment
 

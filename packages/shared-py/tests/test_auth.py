@@ -223,6 +223,14 @@ async def test_tenant_claim(issuer):
     assert result.identity.tenant == "acme"
 
 
+async def test_issuer_with_trailing_slash_is_matched_exactly(issuer):
+    # Review fix: Auth0-style issuers end in "/", and `iss` must match as configured.
+    _mock_issuer(issuer, [JWK1])
+    settings = _settings(OPENCG__AUTH__OIDC__ISSUER=f"{ISSUER}/")
+    result = await _auth(settings, f"Bearer {_token(iss=f'{ISSUER}/')}")
+    assert result.identity.principal == "alice"
+
+
 @pytest.mark.parametrize("claims", [{}, {"org": ""}, {"org": ["acme"]}])
 async def test_missing_configured_tenant_claim_rejected(issuer, claims):
     # A configured tenant claim must be present; no silent fall-back to the default tenant.

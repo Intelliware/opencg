@@ -8,9 +8,12 @@ import { proxy } from "./proxy";
 
 vi.mock("@/lib/auth/oidc", () => ({
   refreshTokens: vi.fn(async () => {
-    throw new Error("revoked");
+    throw Object.assign(new Error("revoked"), { error: "invalid_grant" });
   }),
 }));
+
+const write = (path: string, headers: Record<string, string>, method = "POST") =>
+  new NextRequest(new URL(path, "http://localhost:3000"), { method, headers: { host: "localhost:3000", ...headers } });
 
 const req = (path: string, cookie?: string) =>
   new NextRequest(new URL(path, "http://localhost:3000"), {
@@ -91,5 +94,42 @@ describe("admin UI proxy in oidc mode", () => {
     });
     const res = await proxy(req("/api/proxy/entities/abc", "y".repeat(43)));
     expect(res.status).toBe(503);
+  });
+});
+
+describe("admin UI proxy: cross-origin writes", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(["none", "oidc"])("refuses a cross-site POST in %s mode", async (mode) => {
+    vi.stubEnv("OPENCG__AUTH__MODE", mode === "none" ? "" : mode);
+    vi.stubEnv("OPENCG__ADMIN_UI__PUBLIC_URL", "http://localhost:3300");
+    const res = await proxy(write("/api/proxy/ingestion/git/run", { "sec-fetch-site": "same-site" }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: "cross_origin" });
+  });
+
+  it("refuses a foreign Origin when Sec-Fetch-Site is absent, including sign-out", async () => {
+    const res = await proxy(write("/api/auth/signout", { origin: "http://evil.localhost:3000" }));
+    expect(res.status).toBe(403);
+  });
+
+  it("allows same-origin writes, the configured public URL, and non-browser clients", async () => {
+    vi.stubEnv("OPENCG__AUTH__MODE", "");
+    vi.stubEnv("OPENCG__ADMIN_UI__PUBLIC_URL", "https://opencg.example.com");
+    const cases: Record<string, string>[] = [
+      { "sec-fetch-site": "same-origin" },
+      { origin: "http://localhost:3000" },
+      { origin: "https://opencg.example.com" },
+      {},
+    ];
+    for (const headers of cases) {
+      expect(passedThrough(await proxy(write("/api/proxy/graph/concepts/c1/promote", headers)))).toBe(true);
+    }
+  });
+
+  it("leaves reads alone", async () => {
+    vi.stubEnv("OPENCG__AUTH__MODE", "");
+    const res = await proxy(write("/api/proxy/entities", { "sec-fetch-site": "cross-site" }, "GET"));
+    expect(passedThrough(res)).toBe(true);
   });
 });

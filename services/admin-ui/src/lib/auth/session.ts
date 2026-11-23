@@ -102,10 +102,27 @@ async function refresh(session: Session, now: number): Promise<Session | null> {
     await save(next, now);
     return next;
   } catch (error) {
-    console.warn(`[opencg/admin-ui] token refresh failed; ending the session: ${(error as Error).message}`);
-    await destroySession(session.id);
-    return null;
+    // Another request or admin UI instance may have refreshed first. With
+    // rotating refresh tokens our (old) token is then rejected, but the stored
+    // session already holds the new one: use it, never delete it.
+    const current = await peekSession(session.id).catch(() => null);
+    if (current && current.refreshToken !== session.refreshToken) return current;
+    if (isInvalidGrant(error)) {
+      console.warn("[opencg/admin-ui] refresh token rejected by the IdP; ending the session");
+      await destroySession(session.id);
+      return null;
+    }
+    // The IdP is unreachable or failing: not the user's fault. Keep the session
+    // while its access token still works; after that, fail the request (503).
+    console.warn(`[opencg/admin-ui] token refresh failed: ${(error as Error).message}`);
+    if (session.accessTokenExpiresAt > now) return session;
+    throw error;
   }
+}
+
+/** The IdP refused the refresh token itself (expired, revoked or already used). */
+function isInvalidGrant(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { error?: unknown }).error === "invalid_grant";
 }
 
 const VALID_ID = /^[A-Za-z0-9_-]{20,128}$/;

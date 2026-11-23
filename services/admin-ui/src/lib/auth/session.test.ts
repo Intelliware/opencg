@@ -18,6 +18,7 @@ import { MemoryStore, setSessionStoreForTests } from "./store";
 vi.mock("./oidc", () => ({ refreshTokens: vi.fn() }));
 
 const refresh = vi.mocked(refreshTokens);
+const KEY_PREFIX = "opencg:admin-ui:session:";
 
 function jwt(payload: Record<string, unknown>): string {
   const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -97,10 +98,41 @@ describe("loadSession", () => {
   it("ends the session when the refresh fails", async () => {
     const { id } = await createSession({ accessToken: "at", refreshToken: "rt", expiresIn: 300 }, now);
     now += 301_000;
-    refresh.mockRejectedValue(new Error("invalid_grant"));
+    refresh.mockRejectedValue(Object.assign(new Error("refresh rejected"), { error: "invalid_grant" }));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(await loadSession(id, now)).toBeNull();
     expect(await peekSession(id)).toBeNull();
+  });
+
+  it("keeps the session when another instance already rotated the refresh token", async () => {
+    // Review fix: the losing refresh used to delete the session the winner had just saved.
+    const { id } = await createSession({ accessToken: "at", refreshToken: "rt", expiresIn: 30 }, now);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    refresh.mockImplementation(async () => {
+      const stored = JSON.parse((await store.get(`${KEY_PREFIX}${id}`))!);
+      await store.set(`${KEY_PREFIX}${id}`, JSON.stringify({ ...stored, accessToken: "at2", refreshToken: "rt2" }), 600);
+      throw Object.assign(new Error("token already used"), { error: "invalid_grant" });
+    });
+    const session = await loadSession(id, now);
+    expect(session?.accessToken).toBe("at2");
+    expect((await peekSession(id))?.refreshToken).toBe("rt2");
+  });
+
+  it("keeps the session through an IdP outage while the access token is still valid", async () => {
+    const { id } = await createSession({ accessToken: "at", refreshToken: "rt", expiresIn: 30 }, now);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    refresh.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    expect((await loadSession(id, now))?.accessToken).toBe("at");
+    expect(await peekSession(id)).not.toBeNull();
+  });
+
+  it("fails the request, without signing out, when the IdP is down and the token has expired", async () => {
+    const { id } = await createSession({ accessToken: "at", refreshToken: "rt", expiresIn: 30 }, now);
+    now += 31_000;
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    refresh.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    await expect(loadSession(id, now)).rejects.toThrow("ECONNREFUSED");
+    expect(await peekSession(id)).not.toBeNull();
   });
 
   it("ends an expired session that has no refresh token", async () => {

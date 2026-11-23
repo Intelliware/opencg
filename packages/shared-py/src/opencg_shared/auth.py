@@ -28,9 +28,8 @@ from urllib.parse import urlparse
 
 import httpx
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
-from opencg_shared.metrics import record_auth_failure
 from opencg_shared.types import IdentityContext
 
 log = logging.getLogger(__name__)
@@ -166,7 +165,9 @@ def settings_from_env(
     return AuthSettings(
         mode=mode,  # type: ignore[arg-type]
         environment=environment,  # type: ignore[arg-type]
-        issuer=_env(env, "OPENCG__AUTH__OIDC__ISSUER").rstrip("/"),
+        # Exactly as configured: it is compared with the token's `iss`, and some
+        # IdPs (Auth0) put a trailing slash there. `discovery_base` strips it.
+        issuer=_env(env, "OPENCG__AUTH__OIDC__ISSUER"),
         internal_url=_env(env, "OPENCG__AUTH__OIDC__INTERNAL_URL").rstrip("/"),
         audience=_env(env, "OPENCG__AUTH__OIDC__AUDIENCE", "opencg"),
         principal_claim=_env(env, "OPENCG__AUTH__OIDC__PRINCIPAL_CLAIM", "preferred_username"),
@@ -428,10 +429,8 @@ class Authenticator:
 
 # --- FastAPI glue ----------------------------------------------------------------------------
 
-OPEN_PATHS = frozenset({"/healthz", "/readyz", "/metrics"})
 
-
-def unauthorized(error: AuthError, settings: AuthSettings) -> HTTPException:
+def unauthorized(error: AuthError) -> HTTPException:
     headers = {
         "WWW-Authenticate": f'Bearer error="invalid_token", error_description="{error.code}"'
     }
@@ -442,23 +441,3 @@ def unauthorized(error: AuthError, settings: AuthSettings) -> HTTPException:
         detail={"code": error.code, "message": "authentication required"},
         headers=headers,
     )
-
-
-def make_auth_dependency(service: str):
-    """FastAPI dependency: authenticate the request and store it on `request.state.auth`.
-
-    Expects `request.app.state.authenticator`. Health and metrics paths never reach it.
-    """
-
-    async def dependency(request: Request) -> AuthenticatedIdentity:
-        authenticator: Authenticator = request.app.state.authenticator
-        try:
-            auth = await authenticator.authenticate(request.headers.get("authorization"))
-        except AuthError as exc:
-            record_auth_failure(service, exc.code)
-            log.info("authentication failed on %s: %s", request.url.path, exc.code)
-            raise unauthorized(exc, authenticator.settings) from None
-        request.state.auth = auth
-        return auth
-
-    return dependency

@@ -63,6 +63,15 @@ The default `opencg.admin` policy SHALL grant `reader` the actions `retrieve`, `
 - **WHEN** a principal with roles `["admin"]` calls `DELETE /entities/{id}` for a current-run entity
 - **THEN** the entity is tombstoned
 
+### Requirement: Entitlement on entity routes
+
+`GET /entities` and `GET /entities/{id}` SHALL apply the same `opencg.entitlement` decision as `/retrieve`: a row the caller may not retrieve MUST NOT be listed, and `GET /entities/{id}` MUST respond `404` for it, exactly as for a missing entity. Policy unavailability MUST respond `503 policy_unavailable`.
+
+#### Scenario: Reader cannot open a confidential entity by id
+
+- **WHEN** a principal with roles `["reader"]` requests `GET /entities/{id}` for a `confidential:legal` entity
+- **THEN** the response is `404` and contains none of the entity's text
+
 ### Requirement: Audit routes scoped to the caller's tenant
 
 `GET /audit/recent` SHALL list only retrieval audit rows whose `tenant` is the caller's tenant, and `GET /audit/{id}` MUST respond `404` for a row of another tenant.

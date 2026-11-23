@@ -2,13 +2,18 @@
 
 ### Requirement: OPA policy service
 
-The compose `dev` profile SHALL include an Open Policy Agent service, pinned to an exact image tag, serving `infra/opa/policies/` and `infra/opa/data/` mounted read-only. It MUST be healthchecked, MUST bind to loopback on `${OPENCG__OPA__HOST_PORT:-8281}`, and MUST be reachable at `OPENCG__OPA__URL` (default `http://opa:8181`). The pipeline's `/readyz` MUST fail when OPA is unreachable.
+The compose `dev` profile SHALL include an Open Policy Agent service, pinned to an exact image tag, serving `infra/opa/policies/` and `infra/opa/data/` mounted read-only. It MUST be healthchecked, MUST publish `${OPENCG__OPA__HOST_PORT:-8281}` only on `127.0.0.1` whatever `OPENCG__BIND_ADDRESS` is, and MUST be reachable at `OPENCG__OPA__URL` (default `http://opa:8181`). OPA MUST run with API authorization so that only `POST /v1/data/opencg/...` decision queries and `GET /health` are allowed; any write to policies or data through its API MUST be refused. The pipeline's `/readyz` MUST fail when OPA is unreachable.
 
 #### Scenario: OPA is part of the default stack
 
 - **WHEN** an operator runs `make up-d`
 - **THEN** the `opa` service starts and reports healthy
 - **AND** the pipeline's `/readyz` returns `200`
+
+#### Scenario: Policy cannot be changed through OPA's API
+
+- **WHEN** a client on the compose network sends `PUT /v1/data/actions` to OPA
+- **THEN** OPA responds `401` and later decisions are unchanged
 
 #### Scenario: Readiness fails without OPA
 
