@@ -199,7 +199,7 @@ The repository SHALL ship `infra/compose/docker-compose.observability.yml`, whic
 
 ### Requirement: Backend ports, scraping and retention
 
-Overlay ports MUST follow `${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__<SERVICE>__HOST_PORT:-<default>}`, with defaults Grafana 3030 (3001 is taken by the e2e overlay), Prometheus 9090 and Tempo 3200. Prometheus MUST scrape the pipeline, ingestion service, MCP server and collector. Prometheus retention MUST default to 7 days (`OPENCG__PROMETHEUS__RETENTION`), Tempo's to 48 hours. Each backend MUST use a named volume.
+Overlay ports MUST NOT follow `OPENCG__BIND_ADDRESS`. Prometheus and Tempo MUST publish on `127.0.0.1:${OPENCG__<SERVICE>__HOST_PORT:-<default>}`; Grafana on `${OPENCG__GRAFANA__BIND_ADDRESS:-127.0.0.1}:${OPENCG__GRAFANA__HOST_PORT:-3030}`. Defaults are Grafana 3030 (3001 is taken by the e2e overlay), Prometheus 9090 and Tempo 3200. Prometheus MUST scrape the pipeline, ingestion service, MCP server and collector. Prometheus retention MUST default to 7 days (`OPENCG__PROMETHEUS__RETENTION`), Tempo's to 48 hours. Each backend MUST use a named volume.
 
 #### Scenario: Prometheus targets up
 
@@ -210,6 +210,12 @@ Overlay ports MUST follow `${OPENCG__BIND_ADDRESS:-127.0.0.1}:${OPENCG__<SERVICE
 
 - **WHEN** `.env` sets `OPENCG__GRAFANA__HOST_PORT=3333`
 - **THEN** Grafana is published on `127.0.0.1:3333` and nothing listens on host port 3030 for it
+
+#### Scenario: Unauthenticated backends stay on loopback
+
+- **WHEN** `.env` sets `OPENCG__BIND_ADDRESS=0.0.0.0` and an operator runs `make up-obs`
+- **THEN** Prometheus and Tempo are published only on `127.0.0.1`
+- **AND** Grafana is published only on `127.0.0.1` unless `OPENCG__GRAFANA__BIND_ADDRESS` is set
 
 #### Scenario: Volumes removed with the stack
 
@@ -286,6 +292,11 @@ The README quickstart, the README stack table, `docs/OPERATIONS.md`, `make help`
 ### Requirement: Grafana requires sign-in
 
 Grafana in the overlay SHALL have anonymous access disabled. Its admin password SHALL come from `OPENCG__GRAFANA__ADMIN_PASSWORD`.
+
+#### Scenario: Exposed Grafana needs a real password
+
+- **WHEN** `.env` sets `OPENCG__GRAFANA__BIND_ADDRESS=0.0.0.0` and `OPENCG__GRAFANA__ADMIN_PASSWORD` is unset or `admin`
+- **THEN** `make up-obs` exits non-zero before starting any container, naming both variables
 
 #### Scenario: Anonymous request refused
 
