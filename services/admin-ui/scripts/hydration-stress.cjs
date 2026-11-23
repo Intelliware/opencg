@@ -12,10 +12,15 @@
 //   - /queries row navigations that do not commit within 5 s (once per cycle).
 // It prints a JSON summary and exits non-zero if any counter is above zero.
 //
-// Needs a seeded stack (run after `make smoke` or `make e2e`).
+// Needs a seeded stack (run after `make smoke` or `make e2e`). When the admin
+// UI requires sign-in (OPENCG__AUTH__MODE=oidc, as in CI), every browser reuses
+// the signed-in `alice` session that `make e2e` saves in e2e/.auth/alice.json,
+// so run `make e2e` first.
 //
-// Env: BASE_URL (default http://127.0.0.1:${OPENCG__ADMIN_UI__HOST_PORT:-3000}),
-//      BROWSERS (7), CYCLES (30), SUMMARY_FILE (optional path for the JSON).
+// Env: BASE_URL (default http://localhost:${OPENCG__ADMIN_UI__HOST_PORT:-3000}, the
+//      host e2e uses, so its session cookie applies),
+//      BROWSERS (7), CYCLES (30), SUMMARY_FILE (optional path for the JSON),
+//      STORAGE_STATE (default e2e/.auth/alice.json when it exists).
 "use strict";
 
 const fs = require("node:fs");
@@ -41,11 +46,14 @@ const fileEnv = dotenv();
 const setting = (key, fallback) => process.env[key] || fileEnv[key] || fallback;
 
 const BASE_URL = (
-  process.env.BASE_URL || `http://127.0.0.1:${setting("OPENCG__ADMIN_UI__HOST_PORT", "3000")}`
+  process.env.BASE_URL || `http://localhost:${setting("OPENCG__ADMIN_UI__HOST_PORT", "3000")}`
 ).replace(/\/$/, "");
 const BROWSERS = Number(process.env.BROWSERS || 7);
 const CYCLES = Number(process.env.CYCLES || 30);
 const NAV_TIMEOUT_MS = 5000;
+const DEFAULT_STATE = path.join(__dirname, "../e2e/.auth/alice.json");
+const STORAGE_STATE =
+  process.env.STORAGE_STATE || (fs.existsSync(DEFAULT_STATE) ? DEFAULT_STATE : undefined);
 
 const SIDEBAR = ["/", "/graph", "/vectors", "/entities", "/queries", "/ingestion"];
 const SIDEBAR_NAMES = {
@@ -90,10 +98,18 @@ async function main() {
 
   // Detail ids from the seeded data.
   const seedBrowser = await chromium.launch();
-  const seedPage = await seedBrowser.newPage();
+  const seedPage = await seedBrowser.newPage({ storageState: STORAGE_STATE });
   const queryHref = await firstDetailHref(seedPage, "/queries", "/queries/");
   const entityHref = await firstDetailHref(seedPage, "/entities", "/entities/");
+  const landedOn = seedPage.url();
   await seedBrowser.close();
+  if (!landedOn.startsWith(BASE_URL)) {
+    console.error(
+      `hydration-stress: the admin UI sent the browser to ${new URL(landedOn).origin} (sign-in). ` +
+        "Run `make e2e` first so e2e/.auth/alice.json holds a signed-in session, or set STORAGE_STATE.",
+    );
+    process.exit(2);
+  }
   if (!queryHref || !entityHref) {
     console.error(
       `hydration-stress: no seed data (queries=${queryHref}, entities=${entityHref}). ` +
@@ -107,7 +123,11 @@ async function main() {
   await Promise.all(
     Array.from({ length: BROWSERS }, async (_, worker) => {
       const browser = await chromium.launch();
-      const page = await browser.newPage({ ...devices["Desktop Chrome"], timezoneId: "Pacific/Auckland" });
+      const page = await browser.newPage({
+        ...devices["Desktop Chrome"],
+        timezoneId: "Pacific/Auckland",
+        storageState: STORAGE_STATE,
+      });
       let route = "";
       page.on("pageerror", (err) => {
         const text = String(err);

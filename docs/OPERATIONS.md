@@ -499,6 +499,7 @@ The admin UI's `/queries` page consumes these.
 `make hydration-stress` loads every admin route from several concurrent Chromium browsers against the running production build and counts React hydration errors (#418), other console errors, pages that never hydrated, and client navigations that don't commit within 5 s. It prints a JSON summary (set `SUMMARY_FILE` to also write it to a file) and fails if any count is above zero.
 
 - It needs seeded data, so run it after `make smoke` or `make e2e`.
+- When the admin UI requires sign-in (`oidc` mode, as in CI), every browser reuses the signed-in `alice` session that `make e2e` saves in `services/admin-ui/e2e/.auth/alice.json`, so run `make e2e` first (or point `STORAGE_STATE` at another Playwright storage state). Without a session it stops with a message naming the sign-in redirect.
 - Defaults: `BROWSERS=7 CYCLES=30`, 1,680 page loads, a few minutes. Override with `make hydration-stress BROWSERS=4 CYCLES=10`.
 - Run the full default pass on **every Next.js or React version bump**. CI runs the smaller 4 × 10 pass nightly in the `stack` job.
 - Background: issue #2 only appeared under this kind of load. On Next 15.5.29 it hit about 6–8% of loads; it must stay at zero.

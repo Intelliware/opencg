@@ -44,4 +44,5 @@
 - [x] 6.2 Secret check before pushing (`git diff --cached | grep -iE "bearer [a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,}"`). Commit, push, open a PR to `main` with the before/after stress summaries; `static`, `stack` and `dependency-review` green; one approving review.
 - [ ] 6.3 Draft the closing comment for issue #2 (root cause, before/after numbers, link to the PR and this change). **The owner approves the text before it is posted.** Close the issue when the PR merges.
 - [ ] 6.4 After merge, `openspec archive upgrade-admin-ui-next-16`.
+- [x] 6.6 Review fix (2026-11-23): after `add-identity-and-opa` merged into this branch, CI's stack runs in `oidc` mode and the nightly stress run hit the sign-in page. The script now reuses `e2e/.auth/alice.json` (or `STORAGE_STATE`), defaults `BASE_URL` to `localhost` like e2e so the session cookie applies, and names the sign-in redirect when it has no session.
 - [x] 6.5 Owner decided Q2 (nightly stress run, task 2.4) and Q3 (keep Tremor) on 2026-11-12.
