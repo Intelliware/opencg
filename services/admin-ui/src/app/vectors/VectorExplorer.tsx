@@ -1,20 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import type { VectorSearchHit, VectorSearchResponse } from "@opencg/shared";
+import type { VectorSearchHit } from "@opencg/shared";
+import { CostBreakdown } from "@/components/CostBreakdown";
+import { CostValue } from "@/components/CostValue";
 import { VectorHit } from "@/components/VectorHit";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { VectorSearchResult } from "@/lib/api";
+import { PermissionDenied } from "@/components/PermissionDenied";
+import { summarizeCost } from "@/lib/cost";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
-async function runSearch(query: string, topK: number): Promise<VectorSearchResponse | null> {
+type SearchOutcome =
+  | { kind: "ok"; result: VectorSearchResult }
+  | { kind: "failed" }
+  | { kind: "signin" }
+  | { kind: "denied"; action: string };
+
+async function runSearch(query: string, topK: number): Promise<SearchOutcome> {
   const res = await fetch("/api/proxy/search/vector", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ query, top_k: topK }),
   });
-  if (!res.ok) return null;
-  return (await res.json()) as VectorSearchResponse;
+  const auth = await checkProxyAuth(res, "run a vector search");
+  if (auth.kind !== "ok") return auth;
+  if (!res.ok) return { kind: "failed" };
+  return { kind: "ok", result: (await res.json()) as VectorSearchResult };
+}
+
+/** The search's single embedding call as a provider-usage row (absent on older pipelines). */
+function vectorUsage(r: VectorSearchResult) {
+  if (!("cost_usd" in r)) return null;
+  return [
+    {
+      provider: r.provider,
+      model: r.model,
+      tokens_in: r.tokens_in,
+      tokens_out: 0,
+      cost_usd: r.cost_usd ?? null,
+    },
+  ];
+}
+
+function vectorCost(r: VectorSearchResult) {
+  return summarizeCost(r.cost_usd, vectorUsage(r));
 }
 
 export function VectorExplorer() {
@@ -22,20 +54,28 @@ export function VectorExplorer() {
   const [topK, setTopK] = useState(20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [response, setResponse] = useState<VectorSearchResponse | null>(null);
+  const [denied, setDenied] = useState<string | null>(null);
+  const [response, setResponse] = useState<VectorSearchResult | null>(null);
 
   const executeSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
     setBusy(true);
     setError(null);
-    const r = await runSearch(searchQuery.trim(), topK);
+    setDenied(null);
+    const outcome = await runSearch(searchQuery.trim(), topK);
     setBusy(false);
-    if (!r) {
+    if (outcome.kind === "signin") return;
+    if (outcome.kind === "denied") {
+      setDenied(outcome.action);
+      setResponse(null);
+      return;
+    }
+    if (outcome.kind === "failed") {
       setError("Search failed — see pipeline logs.");
       setResponse(null);
       return;
     }
-    setResponse(r);
+    setResponse(outcome.result);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -73,6 +113,7 @@ export function VectorExplorer() {
         </Button>
       </form>
 
+      {denied ? <PermissionDenied action={denied} className="mb-3" /> : null}
       {error ? (
         <div className="p-3 text-red-600 dark:text-red-400">{error}</div>
       ) : null}
@@ -90,7 +131,15 @@ export function VectorExplorer() {
               provider: <code>{response.provider}</code>
             </span>
             <span>tokens_in: {response.tokens_in}</span>
+            <span className="inline-flex items-center gap-1">
+              cost: <CostValue summary={vectorCost(response)} compact />
+            </span>
           </div>
+          {"cost_usd" in response ? (
+            <div className="mb-2">
+              <CostBreakdown total={response.cost_usd} providers={vectorUsage(response)} />
+            </div>
+          ) : null}
           <Card className="overflow-hidden">
             {response.hits.length === 0 ? (
               <div className="p-6 text-muted-foreground">No hits.</div>

@@ -2,15 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
-async function send(path: string, method: string, body: object) {
-  return fetch(`/api/proxy/graph/${path}`, {
+/** Call the graph proxy; false when the user must sign in or lacks permission. */
+async function send(path: string, method: string, body: object, action: string): Promise<boolean> {
+  const res = await fetch(`/api/proxy/graph/${path}`, {
     method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+  const auth = await checkProxyAuth(res, action);
+  if (auth.kind === "denied") toast.error(auth.message);
+  return auth.kind === "ok";
 }
 
 export function ConceptActions({
@@ -27,14 +33,15 @@ export function ConceptActions({
   const btnClass = menu ? "w-full justify-start" : undefined;
   async function transition(action: string) {
     setBusy(true);
-    await send(`concepts/${conceptId}/${action}`, "POST", { reason: "admin review" });
+    const ok = await send(`concepts/${conceptId}/${action}`, "POST", { reason: "admin review" }, `${action} this concept`);
     setBusy(false);
-    router.refresh();
+    if (ok) router.refresh();
   }
   async function tombstone() {
     setBusy(true);
-    await send(`concepts/${conceptId}`, "DELETE", { reason: "admin review" });
+    const ok = await send(`concepts/${conceptId}`, "DELETE", { reason: "admin review" }, "tombstone this concept");
     setBusy(false);
+    if (!ok) return;
     router.push("/graph");
     router.refresh();
   }
@@ -43,13 +50,14 @@ export function ConceptActions({
     const fromIds = raw?.split(",").map((item) => item.trim()).filter(Boolean);
     if (!fromIds?.length) return;
     setBusy(true);
-    await send("concepts/merge", "POST", {
-      into_id: conceptId,
-      from_ids: fromIds,
-      reason: "admin merge",
-    });
+    const ok = await send(
+      "concepts/merge",
+      "POST",
+      { into_id: conceptId, from_ids: fromIds, reason: "admin merge" },
+      "merge concepts",
+    );
     setBusy(false);
-    router.refresh();
+    if (ok) router.refresh();
   }
   return (
     <div className={wrapClass}>
@@ -68,7 +76,7 @@ export function VocabCreateForm() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
-    await send("vocab", "POST", { name: name.trim(), description });
+    if (!(await send("vocab", "POST", { name: name.trim(), description }, "create a relationship type"))) return;
     setName("");
     setDescription("");
     router.refresh();

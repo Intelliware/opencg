@@ -18,7 +18,7 @@
 - [ ] 2.3 AGE schema bootstrap: create graph `opencg`, add label types per relationship vocabulary
 - [ ] 2.4 Qdrant compose service with persistent volume; bootstrap script that creates `<tenant>__<source>` collections with dense + sparse vector params
 - [ ] 2.5 Valkey compose service with persistent volume
-- [ ] 2.6 OPA compose service mounting `infra/opa/policies/` with a default `allow_internal_only` policy and a `health` rule
+- [ ] 2.6 OPA compose service mounting `infra/opa/policies/` with a default `allow_internal_only` policy and a `health` rule → delivered by `add-identity-and-opa`
 
 ## 3. Shared packages
 
@@ -31,7 +31,7 @@
 
 - [ ] 4.1 Scaffold service with `@modelcontextprotocol/sdk` and HTTP transport
 - [ ] 4.2 Implement `tools/list` with the five tool schemas (`search`, `retrieve_for_context`, `get_entity`, `traverse_graph`, `submit_feedback`)
-- [ ] 4.3 Implement identity stub: load principal/roles from config; accept `x-correlation-id`; generate one when absent
+- [ ] 4.3 Implement identity stub: load principal/roles from config; accept `x-correlation-id`; generate one when absent → delivered by `add-identity-and-opa`
 - [ ] 4.4 Implement pipeline client (HTTP to retrieval-pipeline service); attach identity + correlation ID
 - [ ] 4.5 Wire OTel root span per request with the required attributes and `usage` aggregation
 - [ ] 4.6 Implement `submit_feedback` — write to feedback stream (Valkey stream)
@@ -42,12 +42,12 @@
 ## 5. Retrieval pipeline (Python)
 
 - [ ] 5.1 FastAPI app with a single `/retrieve` endpoint
-- [ ] 5.2 Stage 1 (Identity): validate identity envelope; attach to context
+- [ ] 5.2 Stage 1 (Identity): validate identity envelope; attach to context → delivered by `add-identity-and-opa`
 - [ ] 5.3 Stage 2 (Intent classification): adapter call → `RetrievalPlan`; skip-rule support
 - [ ] 5.4 Stage 3 (Hybrid retrieval): Qdrant hybrid query (dense+sparse) with RRF; concurrent dense+lexical paths; configurable weights
 - [ ] 5.5 Stage 4 (Catalog/graph lookup): enrich candidates with catalog metadata; resolve 1-hop graph context per candidate
 - [ ] 5.6 Stage 5 (Rerank + compress): cross-encoder rerank via adapter; token-budget-aware compression that drops whole documents preferentially
-- [ ] 5.7 Stage 6 (Entitle + audit): OPA evaluation per candidate; write audit row with full record
+- [ ] 5.7 Stage 6 (Entitle + audit): OPA evaluation per candidate; write audit row with full record → delivered by `add-identity-and-opa`
 - [ ] 5.8 Stage 7 (Return): construct `RetrievalResponse` with `usage` envelope
 - [ ] 5.9 Per-stage OTel spans with token attributes and Prometheus counter increments
 - [ ] 5.10 Recreatability test: replay an audit record and assert byte-identical context
@@ -109,7 +109,7 @@
 
 ## 12. Entitlement + audit
 
-- [ ] 12.1 OPA client with per-request decision cache
+- [ ] 12.1 OPA client with per-request decision cache → delivered by `add-identity-and-opa`
 - [ ] 12.2 Audit row writer; immutability trigger verified
 - [ ] 12.3 Audit query API (correlation/principal/time/entity/tool filters)
 - [ ] 12.4 Replay endpoint: reconstruct from stored versions+snapshot; report divergence

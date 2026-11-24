@@ -22,13 +22,22 @@ class RunStore:
         self._runs: deque[IngestionRun] = deque(maxlen=cap)
         self._lock = asyncio.Lock()
 
-    async def add(self, *, connector: str, repo: str | None) -> IngestionRun:
+    async def add(
+        self,
+        *,
+        connector: str,
+        repo: str | None,
+        classification: str = "internal",
+        requested_by: str | None = None,
+    ) -> IngestionRun:
         run = IngestionRun(
             run_id=str(uuid4()),
             connector=connector,
             repo=repo,
             started_at=datetime.now(tz=UTC),
             status="queued",
+            classification=classification,
+            requested_by=requested_by,
         )
         async with self._lock:
             self._runs.appendleft(run)

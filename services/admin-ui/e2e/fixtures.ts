@@ -14,7 +14,8 @@ import type {
   VectorSearchResponse,
 } from "@opencg/shared";
 
-import { PIPELINE_URL } from "./env";
+import { PIPELINE_URL, TEST_AUTH_MODE } from "./env";
+import { ServiceToken } from "./idp";
 
 export interface Run {
   /** Unique per suite run; stamped into the fixture README and concept names. */
@@ -40,8 +41,29 @@ function currentRun(): Run {
 
 export type CandidateEdge = RelationshipEdge & { evidence_entity_ids: string[] };
 
+type Headers = Record<string, string>;
+
+/**
+ * Direct pipeline API calls. In oidc mode every call carries the service
+ * account's token (opencg-smoke: admin, reader), never a user's session.
+ */
 export class Pipeline {
-  constructor(private readonly api: APIRequestContext) {}
+  constructor(
+    private readonly api: APIRequestContext,
+    private readonly token?: ServiceToken,
+  ) {}
+
+  private async auth(): Promise<{ headers: Headers }> {
+    return { headers: this.token ? { authorization: `Bearer ${await this.token.get()}` } : {} };
+  }
+
+  private async get(url: string) {
+    return this.api.get(url, await this.auth());
+  }
+
+  private async post(url: string, data: unknown) {
+    return this.api.post(url, { ...(await this.auth()), data });
+  }
 
   private async json<T>(res: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
     expect(res.ok(), `${res.url()} -> HTTP ${res.status()}`).toBe(true);
@@ -50,46 +72,45 @@ export class Pipeline {
 
   async retrieve(correlationId: string, query: string): Promise<RetrievalResponse> {
     return this.json(
-      await this.api.post("/retrieve", {
-        data: {
-          correlation_id: correlationId,
-          identity: { principal: "local-dev", roles: ["admin", "reader"], tenant: "default" },
-          tool: "retrieve_for_context",
-          query,
-          top_k: 10,
-          token_budget: 2000,
-        },
+      await this.post("/retrieve", {
+        correlation_id: correlationId,
+        // Ignored in oidc mode: the pipeline derives identity from the token.
+        identity: { principal: "local-dev", roles: ["admin", "reader"], tenant: "default" },
+        tool: "retrieve_for_context",
+        query,
+        top_k: 10,
+        token_budget: 2000,
       }),
     );
   }
 
   async auditFor(correlationId: string): Promise<AuditRecord> {
-    const recent = await this.json<{ items: AuditRecord[] }>(await this.api.get("/audit/recent?limit=50"));
+    const recent = await this.json<{ items: AuditRecord[] }>(await this.get("/audit/recent?limit=50"));
     const row = recent.items.find((item) => item.correlation_id === correlationId);
     expect(row, `audit row for ${correlationId}`).toBeTruthy();
-    return this.json(await this.api.get(`/audit/${row!.id}`));
+    return this.json(await this.get(`/audit/${row!.id}`));
   }
 
   /** The run's entities (parents and chunks). The list is newest-first, so they lead it. */
   async runEntities(prefix: string): Promise<EntityListItem[]> {
-    const page = await this.json<EntityListResponse>(await this.api.get("/entities?source=git&limit=200"));
+    const page = await this.json<EntityListResponse>(await this.get("/entities?source=git&limit=200"));
     const items = page.items.filter((item) => item.source_uri.startsWith(prefix));
     expect(items.length, `entities under ${prefix}`).toBeGreaterThan(0);
     return items;
   }
 
   async entity(entityId: string): Promise<EntityListItem> {
-    return this.json(await this.api.get(`/entities/${entityId}`));
+    return this.json(await this.get(`/entities/${entityId}`));
   }
 
   async vectorSearch(query: string, filters?: Record<string, string>): Promise<VectorSearchResponse> {
-    return this.json(await this.api.post("/search/vector", { data: { query, top_k: 100, filters } }));
+    return this.json(await this.post("/search/vector", { query, top_k: 100, filters }));
   }
 
   /** The two concepts the chat stub names after the run. */
   async runConcepts(runId: string): Promise<{ catalogue: ConceptListItem; context: ConceptListItem }> {
     const found = await this.json<{ items: ConceptListItem[] }>(
-      await this.api.get(`/graph/concepts?search=${encodeURIComponent(runId)}&limit=50`),
+      await this.get(`/graph/concepts?search=${encodeURIComponent(runId)}&limit=50`),
     );
     const named = (name: string) => found.items.find((item) => item.name === name);
     const catalogue = named(`Smoke catalogue ${runId}`);
@@ -99,12 +120,12 @@ export class Pipeline {
   }
 
   async concept(conceptId: string): Promise<ConceptDetail> {
-    return this.json(await this.api.get(`/graph/concepts/${conceptId}`));
+    return this.json(await this.get(`/graph/concepts/${conceptId}`));
   }
 
   async edges(state: "candidate" | "confirmed" | "tombstoned"): Promise<CandidateEdge[]> {
     const page = await this.json<{ items: CandidateEdge[] }>(
-      await this.api.get(`/graph/edges?state=${state}&limit=200`),
+      await this.get(`/graph/edges?state=${state}&limit=200`),
     );
     return page.items;
   }
@@ -119,7 +140,7 @@ export class Pipeline {
   }
 
   async vocabulary(): Promise<RelationshipType[]> {
-    return (await this.json<{ items: RelationshipType[] }>(await this.api.get("/graph/vocab"))).items;
+    return (await this.json<{ items: RelationshipType[] }>(await this.get("/graph/vocab"))).items;
   }
 }
 
@@ -154,7 +175,7 @@ export const test = base.extend<object, { run: Run; pipeline: Pipeline }>({
   pipeline: [
     async ({ playwright }, use) => {
       const api = await playwright.request.newContext({ baseURL: PIPELINE_URL });
-      await use(new Pipeline(api));
+      await use(new Pipeline(api, TEST_AUTH_MODE === "oidc" ? new ServiceToken() : undefined));
       await api.dispose();
     },
     { scope: "worker" },

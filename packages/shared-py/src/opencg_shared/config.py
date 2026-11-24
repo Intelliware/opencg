@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+log = logging.getLogger(__name__)
 
 
 class IdentityCfg(BaseModel):
@@ -43,13 +48,39 @@ class OllamaCfg(BaseModel):
 # host/model/key without growing a full provider abstraction yet.
 
 
+_LOGGED_LABEL_RESOLUTIONS: set[str] = set()
+
+
+def _is_ollama_cloud(base_url: str) -> bool:
+    host = (urlparse(base_url).hostname or "").lower()
+    return host == "ollama.com" or host.endswith(".ollama.com")
+
+
 class ProviderEndpoint(BaseModel):
-    """One model caller's wire config."""
+    """One model caller's wire config.
+
+    `provider` is the label every token, cost, error and span record of this
+    endpoint carries. `ollama` and `ollama-cloud` both use the Ollama adapter;
+    an `ollama` endpoint pointing at ollama.com resolves to `ollama-cloud` so
+    local and Cloud calls are counted and priced apart.
+    """
 
     provider: str = "ollama"
     base_url: str
     model: str
     api_key: str | None = None
+
+    @model_validator(mode="after")
+    def _resolve_cloud_label(self) -> ProviderEndpoint:
+        if self.provider == "ollama" and _is_ollama_cloud(self.base_url):
+            self.provider = "ollama-cloud"
+            if self.base_url not in _LOGGED_LABEL_RESOLUTIONS:
+                _LOGGED_LABEL_RESOLUTIONS.add(self.base_url)
+                log.info(
+                    "provider 'ollama' at %s resolved to 'ollama-cloud' for metrics and pricing",
+                    self.base_url,
+                )
+        return self
 
 
 class ExtractionCfg(BaseModel):
@@ -75,6 +106,21 @@ class RetrievalCfg(BaseModel):
 
 class AuditCfg(BaseModel):
     retention_days: int = 90
+
+
+class PriceEntry(BaseModel):
+    """USD per 1,000 tokens for one (provider, model) pair."""
+
+    provider: str
+    model: str
+    input_usd_per_1k: float = Field(ge=0)
+    output_usd_per_1k: float = Field(ge=0)
+    source: str = Field(min_length=1)
+    as_of: date
+
+
+class ObservabilityCfg(BaseModel):
+    pricing: list[PriceEntry] = Field(default_factory=list)
 
 
 class TelemetryCfg(BaseModel):
@@ -113,7 +159,24 @@ class openCGConfig(BaseModel):
     retrieval: RetrievalCfg = Field(default_factory=RetrievalCfg)
     audit: AuditCfg = Field(default_factory=AuditCfg)
     telemetry: TelemetryCfg = Field(default_factory=TelemetryCfg)
+    observability: ObservabilityCfg = Field(default_factory=ObservabilityCfg)
     ingestion: IngestionCfg = Field(default_factory=IngestionCfg)
+
+    def embeddings_endpoint(self) -> ProviderEndpoint:
+        """The endpoint embedding clients use.
+
+        Wire settings come from the legacy `ollama` block, which existing
+        deployments (and `.env.example`) override through `OPENCG__OLLAMA__*`;
+        the label comes from `providers.embeddings.provider`, and an ollama.com
+        base URL resolves to `ollama-cloud`.
+        """
+        label = self.providers.embeddings.provider if self.providers.embeddings else "ollama"
+        return ProviderEndpoint(
+            provider=label,
+            base_url=self.ollama.base_url,
+            model=self.ollama.embedding_model,
+            api_key=self.ollama.api_key,
+        )
 
     def model_post_init(self, _ctx: Any) -> None:
         # Back-compat: if `providers.embeddings` is unset, derive it from

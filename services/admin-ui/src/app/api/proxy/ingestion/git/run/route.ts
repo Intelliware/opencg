@@ -1,19 +1,20 @@
 import { runGit } from "@/lib/api";
-
-const json = (body: unknown, status: number) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+import { PipelineAuthError, authErrorResponse } from "@/lib/auth/errors";
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { repo_url?: string };
   if (!body.repo_url?.trim()) {
-    return json({ error: "repo_url required" }, 400);
+    return Response.json({ error: "repo_url required" }, { status: 400 });
   }
-  const out = await runGit(body.repo_url.trim());
+  let out;
+  try {
+    out = await runGit(body.repo_url.trim());
+  } catch (error) {
+    if (error instanceof PipelineAuthError) return authErrorResponse(error);
+    throw error;
+  }
   if (!out.ok) {
-    return json({ error: out.message }, out.status);
+    return Response.json({ error: out.message }, { status: out.status });
   }
-  return json(out.run, 200);
+  return Response.json(out.run, { status: 200 });
 }

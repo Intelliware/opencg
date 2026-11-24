@@ -1,0 +1,9 @@
+{
+  "title": "Broken: no uid",
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "opencg-prometheus"},
+      "targets": [{"expr": "sum(rate(opencg_requests_total[5m]))", "refId": "A"}]
+    }
+  ]
+}

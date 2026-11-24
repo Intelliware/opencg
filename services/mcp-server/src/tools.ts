@@ -10,6 +10,7 @@ import type {
   TraverseRequest,
   TraverseResponse,
 } from "@opencg/shared";
+import type { Caller } from "./auth.js";
 import type { McpConfig } from "./config.js";
 import { PipelineRequestError, type PipelineClient } from "./pipeline-client.js";
 
@@ -104,6 +105,25 @@ export class ConceptNotFoundError extends Error {
   code = "concept_not_found" as const;
 }
 
+/** Bad tool arguments: counted as `outcome="rejected"`. */
+export class ToolValidationError extends Error {
+  code = "invalid_arguments" as const;
+}
+
+export class UnknownToolError extends Error {
+  code = "unknown_tool" as const;
+}
+
+/** The caller could not be authenticated (stdio without a valid token, pipeline 401). */
+export class UnauthenticatedError extends Error {
+  code = "unauthenticated" as const;
+}
+
+/** `opencg/retrieve_for_context` → `retrieve_for_context`; anything unadvertised → `unknown`. */
+export function toolLabel(name: string): string {
+  return TOOL_DEFINITIONS.some((t) => t.name === name) ? name.replace(/^opencg\//, "") : "unknown";
+}
+
 export interface RetrieveContextArgs {
   query: string;
   top_k?: number;
@@ -115,6 +135,20 @@ export interface ToolCallContext {
   correlationId?: string;
   config: McpConfig;
   pipeline: PipelineClient;
+  /** Authenticated caller; absent → the stub identity (`none` mode, no forwarded token). */
+  caller?: Caller;
+}
+
+function callerOf(ctx: ToolCallContext): Caller {
+  return (
+    ctx.caller ?? {
+      principal: ctx.config.identity.principal,
+      roles: ctx.config.identity.roles,
+      tenant: ctx.config.tenant,
+      authMethod: "none",
+      authorization: null,
+    }
+  );
 }
 
 export async function callTool(
@@ -132,7 +166,7 @@ export async function callTool(
     case "opencg/submit_feedback":
       throw new NotImplementedInMvpError(`${name} ships in a follow-up change`);
     default:
-      throw new Error(`Unknown tool: ${name}`);
+      throw new UnknownToolError(`Unknown tool: ${name}`);
   }
 }
 
@@ -141,18 +175,22 @@ async function traverseGraph(
   ctx: ToolCallContext,
 ): Promise<TraverseResponse> {
   if (!args || typeof args.concept_id !== "string" || !args.concept_id.trim()) {
-    throw new Error("concept_id is required and must be a non-empty string");
+    throw new ToolValidationError("concept_id is required and must be a non-empty string");
   }
   try {
-    return await ctx.pipeline.traverse({
-      concept_id: args.concept_id,
-      ...(args.types !== undefined ? { types: args.types } : {}),
-      ...(args.depth !== undefined ? { depth: args.depth } : {}),
-      ...(args.limit !== undefined ? { limit: args.limit } : {}),
-      ...(args.include_candidates !== undefined
-        ? { include_candidates: args.include_candidates }
-        : {}),
-    });
+    return await ctx.pipeline.traverse(
+      {
+        concept_id: args.concept_id,
+        ...(args.types !== undefined ? { types: args.types } : {}),
+        ...(args.depth !== undefined ? { depth: args.depth } : {}),
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        ...(args.include_candidates !== undefined
+          ? { include_candidates: args.include_candidates }
+          : {}),
+      },
+      ctx.correlationId,
+      callerOf(ctx).authorization,
+    );
   } catch (error) {
     if (error instanceof PipelineRequestError && error.statusCode === 404) {
       throw new ConceptNotFoundError(`concept not found: ${args.concept_id}`);
@@ -166,21 +204,20 @@ async function retrieveForContext(
   ctx: ToolCallContext,
 ): Promise<RetrievalResponse> {
   if (!args || typeof args.query !== "string" || !args.query.trim()) {
-    throw new Error("query is required and must be a non-empty string");
+    throw new ToolValidationError("query is required and must be a non-empty string");
   }
   const correlation_id = ctx.correlationId || randomUUID();
+  const caller = callerOf(ctx);
+  // In `none` mode this is the stub identity the pipeline uses; with a
+  // forwarded token the pipeline ignores it and derives identity from the token.
   const req: RetrievalRequest = {
     correlation_id,
-    identity: {
-      principal: ctx.config.identity.principal,
-      roles: ctx.config.identity.roles,
-      tenant: ctx.config.tenant,
-    },
+    identity: { principal: caller.principal, roles: caller.roles, tenant: caller.tenant },
     tool: "retrieve_for_context",
     query: args.query,
     ...(args.top_k !== undefined ? { top_k: args.top_k } : {}),
     ...(args.token_budget !== undefined ? { token_budget: args.token_budget } : {}),
     ...(args.filters !== undefined ? { filters: args.filters } : {}),
   };
-  return await ctx.pipeline.retrieve(req);
+  return await ctx.pipeline.retrieve(req, caller.authorization);
 }

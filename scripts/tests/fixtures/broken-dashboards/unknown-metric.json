@@ -1,0 +1,13 @@
+{
+  "uid": "broken-unknown-metric",
+  "title": "Broken: metric the shared module does not define",
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "opencg-prometheus"},
+      "targets": [
+        {"expr": "sum(rate(opencg_definitely_not_a_metric_total[5m]))", "refId": "A"},
+        {"expr": "sum(rate(opencg_tokens[5m]))", "refId": "B"}
+      ]
+    }
+  ]
+}

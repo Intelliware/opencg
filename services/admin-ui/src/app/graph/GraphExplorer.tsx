@@ -7,6 +7,7 @@ import { ConceptDetail } from "@/components/ConceptDetail";
 import { ConceptSearch } from "@/components/ConceptSearch";
 import { Button } from "@/components/ui/button";
 import { buildGraphModel, labelVisibility, type GraphNode, type TraverseData } from "./graph-model";
+import { checkProxyAuth } from "@/lib/proxy-client";
 
 type FgNode = NodeObject<GraphNode>;
 type FgLink = LinkObject<GraphNode, { type: string; state: string }>;
@@ -35,12 +36,15 @@ async function fetchTraverse(
   const qs = new URLSearchParams({ concept_id: conceptId, depth: String(depth) });
   if (includeCandidates) qs.set("include_candidates", "true");
   const res = await fetch(`/api/proxy/graph/traverse?${qs}`, { cache: "no-store" });
+  const auth = await checkProxyAuth(res, "explore the graph");
+  if (auth.kind === "denied") throw new Error(auth.message);
   if (!res.ok) throw new Error(`traverse failed (${res.status})`);
   return (await res.json()) as TraverseData;
 }
 
 async function fetchDetail(conceptId: string): Promise<ConceptDetailType | null> {
   const res = await fetch(`/api/proxy/graph/concepts/${conceptId}`, { cache: "no-store" });
+  await checkProxyAuth(res, "view this concept");
   if (!res.ok) return null;
   return (await res.json()) as ConceptDetailType;
 }
@@ -107,6 +111,7 @@ export function GraphExplorer({
     // override a sidebar navigation the user started in the meantime.
     syncUrl(focus, depth, includeCandidates);
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch this effect starts; the result arrives asynchronously
     setLoading(true);
     setError(null);
     fetchTraverse(focus, depth, includeCandidates)
@@ -124,6 +129,7 @@ export function GraphExplorer({
   // Load the detail card for the selected concept.
   useEffect(() => {
     if (!selectedId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the detail card when the selection is cleared; no fetch to run
       setDetail(null);
       return;
     }

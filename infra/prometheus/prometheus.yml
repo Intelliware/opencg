@@ -1,0 +1,39 @@
+# Prometheus for the opt-in observability overlay
+# (infra/compose/docker-compose.observability.yml). Every target is reached by
+# its compose service name on its container port; none of these ports needs
+# to be published. Retention is set on the command line in the overlay
+# (OPENCG__PROMETHEUS__RETENTION, default 7d; 2 GB size cap).
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: pipeline
+    static_configs:
+      - targets: ["pipeline:8000"]
+
+  # Ingestion serves a multiprocess registry, so one-shot CLI runs
+  # (`make ingest-git`, the smoke) are counted too.
+  - job_name: ingestion
+    static_configs:
+      - targets: ["ingestion:8100"]
+
+  # The MCP server's HTTP port; /metrics needs no bearer token.
+  - job_name: mcp-server
+    static_configs:
+      - targets: ["mcp-server:8080"]
+
+  # The collector's own metrics (enabled in infra/otel/otel-collector.tempo.yaml).
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

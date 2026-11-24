@@ -1,0 +1,35 @@
+{
+  "realm": "opencg",
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "${OPENCG__IDP__ALICE_PASSWORD}", "temporary": false }],
+      "realmRoles": ["admin", "reader"]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Reader",
+      "credentials": [{ "type": "password", "value": "${OPENCG__IDP__BOB_PASSWORD}", "temporary": false }],
+      "realmRoles": ["reader"]
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "email": "carol@example.com",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Legal",
+      "credentials": [{ "type": "password", "value": "${OPENCG__IDP__CAROL_PASSWORD}", "temporary": false }],
+      "realmRoles": ["reader", "legal"]
+    }
+  ]
+}

@@ -1,6 +1,8 @@
+import type { ProviderUsage } from "@opencg/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { CostBreakdown } from "./CostBreakdown";
 import { TokenBar } from "./TokenBar";
 
 export interface AuditRecordViewProps {
@@ -21,6 +23,9 @@ export interface AuditRecordViewProps {
     latency_ms: number;
     outcome: "ok" | "error";
     error_code?: string | null;
+    /** Null/absent on rows written before cost was recorded. */
+    estimated_cost_usd?: number | null;
+    usage_by_provider?: readonly ProviderUsage[] | null;
   };
 }
 
@@ -77,6 +82,14 @@ export function AuditRecordView({ record }: AuditRecordViewProps) {
       <section>
         <div className="mb-1 text-xs text-muted-foreground">Token usage</div>
         <TokenBar tokens_in={record.tokens_in} tokens_out={record.tokens_out} />
+      </section>
+
+      <section>
+        <div className="mb-1 text-xs text-muted-foreground">Estimated cost by provider</div>
+        <CostBreakdown
+          total={record.estimated_cost_usd}
+          providers={record.usage_by_provider}
+        />
       </section>
 
       <section>

@@ -4,6 +4,46 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Breaking
+
+- **Removed the shared-secret stopgaps** (`add-identity-and-opa`): the admin UI password gate (`OPENCG__ADMIN_UI__PASSWORD`, `/login`, `/api/auth/login`, `/api/auth/logout`) and the MCP server's built-in OAuth server (`OPENCG__MCP__OAUTH_PASSWORD`, `/authorize`, `/token`, `/register`, `/revoke`, `/.well-known/oauth-authorization-server`, `POST /oauth/approve`). Services **refuse to start** if either variable is set. See `docs/OPERATIONS.md` "Migrating from the stopgaps".
+- `OPENCG__MCP__HTTP_TOKEN` is accepted only when `OPENCG__ENVIRONMENT=dev`. An **unset `OPENCG__ENVIRONMENT` means `production`**, in the services and in compose; `.env.example` sets `dev`. Add `OPENCG__ENVIRONMENT=dev` to an existing local `.env` that lacks it.
+- `none` auth mode refuses to start when `OPENCG__BIND_ADDRESS` is not a loopback address.
+- Outside `OPENCG__ENVIRONMENT=dev` or `test`, every service and the bundled Keycloak refuse to start while any `OPENCG__*` or `KC_*` variable still holds a `dev-only-*` value from `.env.example`.
+- With `OPENCG__AUTH__OIDC__TENANT_CLAIM` set, a token without that claim gets `401 token_invalid` instead of the default tenant. `/audit/recent` and `/audit/{id}` are scoped to the caller's tenant.
+- `GET /entities` and `GET /entities/{id}` apply retrieval entitlement: rows the caller may not retrieve are not listed, and a denied entity is a `404`.
+- OPA's REST API accepts only decision queries and `/health` (`--authorization=basic`, `infra/opa/policies/system_authz.rego`), and its debugging port is always loopback.
+- The admin UI refuses cross-origin `POST`/`PUT`/`PATCH`/`DELETE` requests to `/api/**` (`403 cross_origin`).
+- The pipeline's and ingestion service's `/readyz` return `503` until `060_audit_cost.sql` and `070_access_audit.sql` are applied to an existing volume.
+- Retrieval entitlement moved from a role map in the pipeline to OPA. `confidential:<domain>` content now needs the `<domain>` role, and unknown classifications are denied.
+
+### Added
+
+- **Real identity and policy** (`add-identity-and-opa`): `OPENCG__AUTH__MODE=oidc` validates access tokens from any OIDC issuer in every service; the MCP server is an OAuth protected resource; the admin UI signs in with authorization code + PKCE and keeps server-side sessions in Valkey. A bundled Keycloak (`26.8.1`) runs in the same compose project for local use, smoke, e2e and CI.
+- OPA (`1.21.4`) decides every retrieval candidate (one batched call, before the token budget) and every API action, in both auth modes, failing closed with `503 policy_unavailable`. Policies, data and tests live in `infra/opa/` (`make opa-test`, `make opa-revision`).
+- `opencg.access_audit_log` (append-only) records denials and allowed state-changing actions; retrieval audit rows record `auth_method` and each candidate's policy decision and revision. Apply `070_access_audit.sql` to an existing volume with `make db-apply`.
+- Ingestion runs take a `classification` (`--classification` on the CLI); runs record `requested_by`.
+- Dev-only named API keys (`make api-key`), `OPENCG__ENVIRONMENT`, and `opencg_auth_failures_total{service,reason}`.
+- **Optional observability stack** (`add-observability-stack`): Prometheus `v3.15.1`, Tempo `3.1.1` and Grafana `13.2.5` in a new opt-in compose overlay, `infra/compose/docker-compose.observability.yml`. It is **not** part of the default stack: start it with `make up-obs` (about 700 MB more RAM), stop it with `make down`. Grafana (port 3030, login required, no anonymous access) ships six provisioned dashboards: requests, pipeline stages, tokens and cost, ingestion, audit, and providers. Prometheus and Tempo, which have no login, always bind to `127.0.0.1`; Grafana does too unless `OPENCG__GRAFANA__BIND_ADDRESS` is set, and `make up-obs` refuses that with the default password. See `docs/OPERATIONS.md` § Observability.
+- One connected trace per MCP tool call: the MCP server now exports OpenTelemetry spans (`mcp.<tool>`) and propagates `traceparent` to the pipeline, every span carries `correlation_id`, and each model call has its own `model.embed` / `model.chat` span.
+- `/metrics` on the ingestion service (multiprocess, so CLI runs count) and the MCP server, alongside the pipeline. New series for cost, unpriced tokens, audit writes and ingestion runs, documents, chunks and duration; stage latency, provider errors and error outcomes are now recorded.
+- Estimated cost: an `observability.pricing` table in `opencg.yaml` (with `source` and `as_of` on every row), `opencg_cost_usd_total`, `by_provider` / `estimated_cost_usd` / `cost_complete` in the usage envelope, cost columns on the retrieval audit row (`infra/postgres/init/060_audit_cost.sql`; apply it by hand on an existing volume), and cost beside every token count in the admin UI. A model with no price shows as "unpriced", never as free.
+- `make smoke` now also checks every service's `/metrics`; `make smoke-obs` checks Prometheus targets, token and cost series, the Tempo trace and the Grafana dashboards. `make check-dashboards` lints the dashboard JSON in `make ci-static`.
+- CI: a new `observability` job runs `make smoke-obs` on every pull request into `main`, on pushes to `main` and nightly. It is listed as a required check in `.github/rulesets/main-branch-protection.json`.
+
+### Changed
+
+- **Admin UI on Next.js 16.4.5 and React 19** (`upgrade-admin-ui-next-16`). 16.4.5 is taken as a recorded exception to the two-week rule because it is a security release. `middleware.ts` is now `proxy.ts` (Node runtime). Contributors need Node 20.9 or newer.
+- New `make hydration-stress` check; CI runs a smaller pass nightly.
+- The default chat model (used by knowledge-graph text extraction) is now Ollama Cloud `gemma4:31b` instead of `gemma3:4b`, which has no published per-token price. Set `OPENCG__PROVIDERS__CHAT__MODEL` to keep the old model.
+- **Provider label for Ollama Cloud chat is now `ollama-cloud`** (was `ollama`) on tokens, cost, provider errors and spans; `providers.chat.provider` defaults to `ollama-cloud`, and an older `provider: ollama` block with an `ollama.com` base URL is relabelled at start-up. Queries or dashboards that filter chat on `provider="ollama"` need updating.
+- Embedding tokens spent during ingestion are now counted (`opencg_tokens_total{stage="ingest_embed"}`).
+- `make down` and `make down-v` also remove the observability overlay's containers (and, for `down-v`, its volumes) and orphaned overlay services.
+
+### Fixed
+
+- Intermittent React hydration error #418 in the admin UI under load (#2): 0 in 1,680 stressed loads on Next 16 vs 34 in 560 on 15.5.29. The e2e reload workaround is removed.
+
 ## [0.1.0] - 2026-11-10
 
 The first public release.

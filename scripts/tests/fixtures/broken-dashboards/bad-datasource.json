@@ -1,0 +1,10 @@
+{
+  "uid": "broken-bad-datasource",
+  "title": "Broken: datasource UID outside the allowed set",
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "some-other-prometheus"},
+      "targets": [{"expr": "sum(rate(opencg_requests_total[5m]))", "refId": "A"}]
+    }
+  ]
+}

@@ -54,6 +54,7 @@ async def reextract_chunks(
         base_url=chat_cfg.base_url,
         model=chat_cfg.model,
         api_key=chat_cfg.api_key,
+        provider=chat_cfg.provider,
     )
     version = current_extractor_version(chat_cfg.model)
     await catalog.connect()
