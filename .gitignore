@@ -61,3 +61,7 @@ coverage/
 playwright-report/
 test-results/
 services/admin-ui/e2e/.auth/
+
+# Demo (add-showcase-seed-packs): per-machine persona API keys (raw keys and their hashes).
+demo/.api-keys.json
+demo/.persona-keys

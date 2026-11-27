@@ -25,7 +25,7 @@ PROFILES := --profile dev $(if $(BUNDLED_IDP),--profile idp)
 # down/down-v always name `idp` so a Keycloak started earlier is removed too.
 PROFILES_ALL := --profile dev --profile idp
 
-.PHONY: help bootstrap up up-d up-obs down down-v logs ps db-apply opa-test opa-revision test test-mcp test-shared test-pipeline test-ingestion test-ui test-scripts lint typecheck format smoke smoke-cloud smoke-obs e2e e2e-ui hydration-stress ingest-git storybook check-agent-guides check-dashboards check-roadmap openspec-validate secrets-scan ci ci-static ci-stack api-key
+.PHONY: help bootstrap up up-d up-obs down down-v logs ps db-apply opa-test opa-revision test test-mcp test-shared test-pipeline test-ingestion test-ui test-scripts lint typecheck format smoke smoke-cloud smoke-obs e2e e2e-ui hydration-stress ingest-git storybook check-agent-guides check-dashboards check-roadmap openspec-validate secrets-scan ci ci-static ci-stack api-key demo-up demo-seed demo-reset demo-smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -122,6 +122,29 @@ smoke-obs: ## OPTIONAL: smoke + observability overlay checks (Prometheus, Tempo,
 e2e: ## Admin UI e2e suite (Playwright); starts the stack if needed; OPENCG_TEST_AUTH_MODE=oidc (default) or none
 	$(COMPOSE) $(PROFILES) up -d --wait --no-recreate
 	pnpm --filter @opencg/admin-ui e2e
+
+# Demo (add-showcase-seed-packs; docs/DEMO.md): the stack in oidc mode with the
+# bundled Keycloak and the demo overlay, which mounts demo/packs into ingestion.
+# OBS=1 adds the observability overlay (Prometheus, Tempo, Grafana) to the demo.
+DEMO_COMPOSE := docker compose -f infra/compose/docker-compose.yml \
+	-f infra/compose/docker-compose.oidc.yml -f infra/compose/docker-compose.demo.yml \
+	$(if $(OBS),-f infra/compose/docker-compose.observability.yml) \
+	--env-file .env --profile dev --profile idp
+PACK ?= all
+
+demo-up: ## Start the demo stack (oidc mode, bundled Keycloak, demo overlay; OBS=1 adds Grafana)
+	$(if $(OBS),@./scripts/check-grafana-exposure.sh)
+	@test -f demo/.api-keys.json || echo '[]' > demo/.api-keys.json
+	$(DEMO_COMPOSE) up -d --wait
+
+demo-seed: ## Seed demo personas and packs: make demo-seed PACK=wealth|payments|retail|all
+	./demo/scripts/seed.sh $(PACK)
+
+demo-reset: ## Tombstone a demo pack's entities and concepts: make demo-reset PACK=...
+	./demo/scripts/reset.sh $(PACK)
+
+demo-smoke: ## Seed all packs with the chat stub, check persona split answers, reset
+	./demo/scripts/smoke.sh
 
 hydration-stress: ## Admin UI hydration stress check (needs a seeded stack; BROWSERS=7 CYCLES=30 by default)
 	BROWSERS=$(or $(BROWSERS),7) CYCLES=$(or $(CYCLES),30) \

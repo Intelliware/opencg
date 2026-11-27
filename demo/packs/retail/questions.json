@@ -1,0 +1,38 @@
+[
+  {
+    "id": "retail-1",
+    "question": "What credit score cut-off auto-declines a personal loan application?",
+    "persona": "demo-branch",
+    "internal": "internal/account-opening-procedure.md",
+    "confidential": "confidential/retail-credit-decisioning-policy.md",
+    "persona_sees": "The personal loan auto-decline score cut-off of 560, the refer band of 560 to 639 and the 42 percent TDS limit.",
+    "reader_sees": "That the decision engine applies an auto-decline score cut-off set in a confidential credit policy, with no figures."
+  },
+  {
+    "id": "retail-2",
+    "question": "When does an account move to external collections?",
+    "persona": "demo-branch",
+    "internal": "internal/financial-hardship-programme-procedure.md",
+    "confidential": "confidential/retail-collections-strategy.md",
+    "persona_sees": "Unsecured accounts move to external collections at 120 days past due, unless a hardship arrangement, complaint, dispute or vulnerability flag blocks it.",
+    "reader_sees": "That accounts move through collections stages and that timings are in a confidential collections strategy, with no figures."
+  },
+  {
+    "id": "retail-3",
+    "question": "How much of a rate discount can a branch manager approve?",
+    "persona": "demo-branch",
+    "internal": "internal/account-opening-procedure.md",
+    "confidential": "confidential/retail-pricing-exception-authorities.md",
+    "persona_sees": "A branch manager may approve up to 0.25 percentage points off the advertised rate; more goes to the District Manager.",
+    "reader_sees": "That rate discount approval levels depend on role and are set in a confidential pricing authorities document, with no figures."
+  },
+  {
+    "id": "retail-4",
+    "question": "What is the maximum goodwill refund a card disputes team lead can approve?",
+    "persona": "demo-branch",
+    "internal": "internal/dispute-investigation-procedure.md",
+    "confidential": "confidential/retail-pricing-exception-authorities.md",
+    "persona_sees": "A Card Disputes Team Lead may approve a goodwill refund of up to CAD 500 per case.",
+    "reader_sees": "That goodwill refunds need approval by role and that the limits are held in a confidential document, with no figures."
+  }
+]

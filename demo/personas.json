@@ -1,0 +1,21 @@
+{
+  "roles": [
+    {"name": "wealth", "description": "Demo domain role: may read content classified confidential:wealth"},
+    {"name": "payments", "description": "Demo domain role: may read content classified confidential:payments"},
+    {"name": "retail", "description": "Demo domain role: may read content classified confidential:retail"}
+  ],
+  "personas": [
+    {"username": "demo-advisor", "first": "Demo", "last": "Advisor", "roles": ["reader", "wealth"], "shows": "Wealth specifics; nothing confidential from payments or retail"},
+    {"username": "demo-payments-ops", "first": "Demo", "last": "Payments Ops", "roles": ["reader", "payments"], "shows": "Payments specifics"},
+    {"username": "demo-branch", "first": "Demo", "last": "Branch", "roles": ["reader", "retail"], "shows": "Retail specifics"},
+    {"username": "demo-compliance", "first": "Demo", "last": "Compliance", "roles": ["reader", "wealth", "payments", "retail"], "shows": "Everything"},
+    {"username": "demo-reader", "first": "Demo", "last": "Reader", "roles": ["reader"], "shows": "Public and internal only: the referral, never the specifics"}
+  ],
+  "service_accounts": [
+    {"client_id": "opencg-demo-admin", "roles": ["admin", "reader"], "purpose": "demo-reset (tombstones through the pipeline API)"},
+    {"client_id": "opencg-demo-reader", "roles": ["reader"], "purpose": "demo-smoke, as demo-reader"},
+    {"client_id": "opencg-demo-advisor", "roles": ["reader", "wealth"], "purpose": "demo-smoke, as demo-advisor"},
+    {"client_id": "opencg-demo-payments-ops", "roles": ["reader", "payments"], "purpose": "demo-smoke, as demo-payments-ops"},
+    {"client_id": "opencg-demo-branch", "roles": ["reader", "retail"], "purpose": "demo-smoke, as demo-branch"}
+  ]
+}

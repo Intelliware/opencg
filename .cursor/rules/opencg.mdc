@@ -101,6 +101,8 @@ infra/compose/docker-compose.observability.yml  opt-in Prometheus/Tempo/Grafana 
 tests/smoke/run.sh                  end-to-end smoke (helpers in tests/smoke/lib.sh); SMOKE_OBS=1 = make smoke-obs
 scripts/                            check-agent-guides.sh, check-dashboards.py (+ tests/)
 services/admin-ui/e2e/              Playwright e2e suite (make e2e); scripts/hydration-stress.cjs (make hydration-stress)
+demo/                               synthetic demo packs, personas and demo-seed/reset/smoke scripts (docs/DEMO.md)
+infra/compose/docker-compose.demo.yml  demo overlay: packs mounted into ingestion, persona API keys file
 .github/                            CI workflow, Dependabot, ruleset, templates
 docs/OPERATIONS.md                  operator runbook
 ```

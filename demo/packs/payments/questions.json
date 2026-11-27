@@ -1,0 +1,38 @@
+[
+  {
+    "id": "payments-1",
+    "question": "What amount triggers manual fraud review of an outgoing wire, and how many approvers does that review need?",
+    "persona": "demo-payments-ops",
+    "internal": "internal/wire-repair-and-returns-runbook.md",
+    "confidential": "confidential/fraud-detection-rules-and-thresholds.md",
+    "persona_sees": "The CAD 50,000 outgoing wire manual review threshold, the two-approver rule and the lower CAD 10,000 threshold for high-risk countries.",
+    "reader_sees": "That an outgoing wire manual review threshold exists and is set by the fraud team, with no figures."
+  },
+  {
+    "id": "payments-2",
+    "question": "What fuzzy-match score sends a sanctions alert to Level 2 review?",
+    "persona": "demo-payments-ops",
+    "internal": "internal/sanctions-alert-triage-procedure.md",
+    "confidential": "confidential/sanctions-screening-tuning.md",
+    "persona_sees": "A fuzzy match score of 85 sends an alert to Level 2, with 70 to 84 at Level 1 and automatic hold at 95 or more.",
+    "reader_sees": "The three alert levels and who works them, but not the scores, which are held in a restricted tuning document."
+  },
+  {
+    "id": "payments-3",
+    "question": "Who must approve release of a held high-value payment during an incident, for example a payment of CAD 300,000?",
+    "persona": "demo-payments-ops",
+    "internal": "internal/payment-incident-runbook.md",
+    "confidential": "confidential/high-value-payment-approval-limits.md",
+    "persona_sees": "Two approvers plus the Head of Payments Operations for payments from CAD 250,000 to 999,999, and the Chief Operating Officer above CAD 1,000,000.",
+    "reader_sees": "That approval depends on payment value and delegation rules exist, with no figures or approver roles."
+  },
+  {
+    "id": "payments-4",
+    "question": "How many outgoing payments per hour trigger a velocity hold for a client?",
+    "persona": "demo-payments-ops",
+    "internal": "internal/payment-incident-runbook.md",
+    "confidential": "confidential/fraud-detection-rules-and-thresholds.md",
+    "persona_sees": "Ten or more outgoing payments per client per hour trigger a velocity hold and review.",
+    "reader_sees": "That temporary velocity limits are applied by Fraud Operations, with no figures."
+  }
+]

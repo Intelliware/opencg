@@ -106,6 +106,16 @@ Every port binds to `127.0.0.1` and can be moved in `.env` if it collides with s
 
 Run the deterministic full-stack verification with `make smoke`. It builds a temporary local Git fixture, uses local embeddings plus an Ollama-compatible chat stub, verifies OTel spans and every service's `/metrics`, and enforces a five-minute deadline. `make smoke-obs` runs it with the optional observability overlay and also checks Prometheus, Tempo and Grafana. A real-provider canary is opt-in via `make smoke-cloud` and is capped at one document and two chunks.
 
+## Try the demo
+
+Three synthetic packs (wealth, payments and retail banking, at the fictional Juniper Bay Financial Group) show the same question getting different answers per role, the knowledge graph, and per-request cost:
+
+```bash
+make demo-up && make demo-seed     # signed-in stack, demo personas, all three packs
+```
+
+Then connect Claude Code, Claude Desktop or Cursor and follow the scripts in [`docs/DEMO.md`](./docs/DEMO.md).
+
 ## Connect your AI tools (MCP)
 
 With the stack running (`make up-d`), openCG exposes its catalogue over the **Model Context Protocol** via the `opencg` MCP server — over **stdio** (spawn it as a subprocess) or a **remote HTTP** endpoint (connect by URL). Two tools are live today — `opencg/retrieve_for_context` (hybrid retrieval) and `opencg/traverse_graph` (walk the knowledge graph); the other three return `not_implemented_in_mvp`. Any MCP-capable client can connect.

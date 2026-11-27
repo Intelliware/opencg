@@ -19,6 +19,12 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ### Added
 
+- **Demo packs** (`add-showcase-seed-packs`):
+  - synthetic wealth, payments and retail banking content at the fictional Juniper Bay Financial Group (`demo/packs/`), split into public, internal and `confidential:<pack>` folders;
+  - five demo personas created in the bundled Keycloak at seed time (dev only), plus optional per-persona dev API keys;
+  - `make demo-up` (`OBS=1` for Grafana), `make demo-seed PACK=…`, `make demo-reset` and `make demo-smoke`. The last runs in the CI `stack` job on every PR and checks every scripted question's split answer;
+  - [`docs/DEMO.md`](./docs/DEMO.md): connecting Claude Code, Claude Desktop and Cursor, and the per-pack scripts;
+  - OPA's `confidential_domains` gains `wealth`, `payments` and `retail`.
 - **`ROADMAP.md`**: the project backlog, grouped Now / Next / Later. Each item's ID is its OpenSpec change name; proposing a change marks the item `proposed`, and archiving it removes the item. `make check-roadmap` (in `make ci-static`) keeps the roadmap and `openspec/changes/` consistent. `add-foundation` is archived as superseded, with each open task recorded as shipped, moved to the roadmap, or dropped.
 - **Real identity and policy** (`add-identity-and-opa`): `OPENCG__AUTH__MODE=oidc` validates access tokens from any OIDC issuer in every service; the MCP server is an OAuth protected resource; the admin UI signs in with authorization code + PKCE and keeps server-side sessions in Valkey. A bundled Keycloak (`26.8.1`) runs in the same compose project for local use, smoke, e2e and CI.
 - OPA (`1.21.4`) decides every retrieval candidate (one batched call, before the token budget) and every API action, in both auth modes, failing closed with `503 policy_unavailable`. Policies, data and tests live in `infra/opa/` (`make opa-test`, `make opa-revision`).

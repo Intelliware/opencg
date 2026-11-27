@@ -17,6 +17,10 @@ Prometheus, Tempo and Grafana are **not** started by `make up-d`. They are an op
 
 First start downloads the Postgres+AGE image, the Qdrant image, the Valkey image, and the Ollama image, and then pulls the configured embedding model (~270 MB for `nomic-embed-text`). Expect 3–5 minutes on a typical laptop.
 
+## Demo packs
+
+`make demo-up`, `make demo-seed`, `make demo-reset` and `make demo-smoke` run the wealth, payments and retail showcase: synthetic content in `demo/packs/`, demo personas in the bundled Keycloak, and per-persona scripts. All of it works only with `OPENCG__ENVIRONMENT=dev`. See [`docs/DEMO.md`](./DEMO.md).
+
 ## Network exposure and host ports
 
 Every published port binds to `OPENCG__BIND_ADDRESS`, which defaults to `127.0.0.1`, so nothing is reachable from other machines unless you change it. Set it to `0.0.0.0` only on purpose, and only after setting real passwords and tokens (see [`SECURITY.md`](../SECURITY.md)). The pipeline and ingestion APIs have no authentication of their own.
