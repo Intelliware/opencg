@@ -84,7 +84,7 @@ Each item has:
 
 ### add-showcase-seed-packs
 
-- **Status:** ready
+- **Status:** proposed
 - **Size:** L
 - **Capabilities:** new: showcase-packs, ingestion, smoke-testing
 - **Depends on:** none
