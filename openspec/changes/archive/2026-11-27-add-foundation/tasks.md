@@ -153,3 +153,51 @@
 - [ ] 16.4 `docs/MODEL_PROVIDERS.md` — how to add a provider
 - [ ] 16.5 `docs/OPERATIONS.md` — config reference, health checks, backup/restore for catalog + audit
 - [ ] 16.6 Reference architecture image saved under `docs/reference-architecture/`
+
+## Superseded (archived 2026-11-27 when ROADMAP.md was introduced)
+
+Archived as superseded, without syncing its spec deltas: the baseline in `openspec/specs/` was built by the follow-up changes, which modified most of these requirements. The open tasks above were never ticked; each is either shipped, moved to a [`ROADMAP.md`](../../../../ROADMAP.md) item, or dropped.
+
+| Tasks | Disposition |
+|---|---|
+| 1.1–1.3, 1.5, 1.6 Scaffolding, workspaces, config | Shipped by `bootstrap-thin-mvp` |
+| 1.4 `migrate` and `seed` Make targets | Dropped: schema is applied by `infra/postgres/init/*` (and `make db-apply`); demo data moves to roadmap `add-showcase-seed-packs` |
+| 2.1, 2.3, 2.5 Postgres with AGE, graph bootstrap, Valkey | Shipped by `bootstrap-thin-mvp` and `add-knowledge-graph` |
+| 2.2 Initial schema | Shipped by `bootstrap-thin-mvp` and `add-knowledge-graph`, except weekly audit partitions (roadmap `add-audit-partitions`) and usage signals (roadmap `add-usage-feedback`) |
+| 2.4 Qdrant collections with dense + sparse vectors | Dense shipped by `bootstrap-thin-mvp`; sparse dropped: the lexical leg runs on Postgres full-text search and is fused with RRF |
+| 2.6, 4.3, 5.2, 5.7, 12.1 OPA, identity, entitlement | Shipped by `add-identity-and-opa` |
+| 3.1, 3.3, 3.4 Shared types, OTel bootstrap, config loader | Shipped by `bootstrap-thin-mvp` and `add-observability-stack` |
+| 3.2 Types generated from one JSON Schema | Dropped: hand-written mirrors in `packages/shared` and `packages/shared-py` |
+| 4.1, 4.2, 4.4, 4.5, 4.8, 4.9 MCP server, tools, pipeline client, spans, tests | Shipped by `bootstrap-thin-mvp`, `add-mcp-http-transport` and `add-observability-stack` |
+| 4.6 `submit_feedback` | Roadmap `add-usage-feedback` |
+| 4.7 MCP `/readyz` checks OPA | Dropped: the MCP server never calls OPA; the pipeline does, and its readiness covers it |
+| 5.1, 5.4, 5.8, 5.9 `/retrieve`, hybrid retrieval, response, per-stage telemetry | Shipped by `bootstrap-thin-mvp` and `add-observability-stack` |
+| 5.3 Intent classification | Roadmap `add-intent-classifier` |
+| 5.5 Catalog and graph enrichment | Roadmap `add-graph-enriched-retrieval` |
+| 5.6 Rerank and compression | Roadmap `add-rerank-and-compression` |
+| 5.10, 9.4, 12.4, 12.6 Snapshots, replay, recreatability | Roadmap `add-audit-replay` |
+| 6.1, 6.3–6.5, 6.7 Provider protocols, Anthropic and OpenAI-compatible adapters, registry, recorded tests | Roadmap `add-provider-adapters` |
+| 6.2 Ollama adapter | Shipped by `bootstrap-thin-mvp` (local embeddings) and `add-knowledge-graph` (Ollama Cloud chat) |
+| 6.6 Cost table and cost metric | Shipped by `add-observability-stack` (price table in `opencg.yaml`) |
+| 7.1–7.4, 7.6 Vocabulary, edges, review, traversal, tests | Shipped by `add-knowledge-graph` |
+| 7.5 Community detection | Roadmap `add-graph-communities` |
+| 8.1, 8.2, 8.4, 8.5 Entity CRUD, lineage, direct query, tests | Shipped by `bootstrap-thin-mvp` and `add-admin-vector-and-content` |
+| 8.3, 11.1–11.4, 11.6 Freshness transitions, enrichment workers | Roadmap `add-background-enrichment` |
+| 11.5 Usage feedback consumer | Roadmap `add-usage-feedback` |
+| 9.1–9.3, 9.5 Qdrant bootstrap, upsert, search, tests | Shipped by `bootstrap-thin-mvp` (dense) and `exclude-tombstoned-from-retrieval` |
+| 10.1, 10.3, 10.7 Connector framework, Confluence, fixture tests | Roadmap `add-confluence-connector` |
+| 10.2, 10.6, 10.8 Git connector, content-hash idempotency, connector status | Shipped by `bootstrap-thin-mvp`, `adopt-graphifyy` and `add-admin-vector-and-content` |
+| 10.4 Custom HTTP API connector | Roadmap `add-custom-api-connector` |
+| 10.5 Web indexer | Roadmap `add-web-indexer` |
+| 12.2 Audit writer and immutability trigger | Shipped by `bootstrap-thin-mvp` |
+| 12.3, 12.5 Audit query API, legal hold flow | Roadmap `add-audit-search` |
+| 13.1 Collector to Loki | Collector shipped by `bootstrap-thin-mvp`; Loki is roadmap `add-log-aggregation` |
+| 13.2–13.6 Tempo, Prometheus, Grafana, dashboards, cost, trace smoke | Shipped by `add-observability-stack` |
+| 14.1–14.3, 14.5, 14.6, 14.8 Admin UI pages and e2e | Shipped by `add-admin-vector-and-content`, `add-knowledge-graph`, `add-graph-explorer-view` and `prepare-open-source-release` |
+| 14.4 Vector projection | Roadmap `add-vector-projection` |
+| 14.7 Grafana embeds in the admin UI | Dropped: `add-observability-stack` shows cost natively in the admin UI, and Grafana runs separately |
+| 15.1, 15.4, 15.6 Compose stack, start-up time, `make smoke` | Shipped by `bootstrap-thin-mvp` and `stabilize-full-smoke` |
+| 15.2, 15.3 Hot-reload `dev` and `local-prod` profiles | Roadmap `add-local-prod-profile` |
+| 15.5 Refuse to boot with stub identity in production | Shipped by `add-identity-and-opa` (production refuses `none` off loopback, API keys and `dev-only-*` values) |
+| 16.1, 16.5 README, OPERATIONS | Shipped by `prepare-open-source-release` and kept current by each change |
+| 16.2–16.4, 16.6 Architecture, connector and provider guides, reference diagram | Roadmap `add-contributor-guides` |
