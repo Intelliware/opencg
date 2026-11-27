@@ -1,0 +1,29 @@
+[
+  {
+    "id": "wealth-1",
+    "question": "What household asset level makes a client high-net-worth, and what is the high-net-worth segment threshold?",
+    "persona": "demo-advisor",
+    "internal": "internal/kyc-refresh-procedure.md",
+    "confidential": "confidential/high-net-worth-client-segmentation-thresholds.md",
+    "persona_sees": "The CAD 1,000,000 household investable assets threshold, the segment table and the two-month-end upgrade rule.",
+    "reader_sees": "That high-net-worth clients are refreshed annually and that the segment threshold is defined in a confidential document, with no figures."
+  },
+  {
+    "id": "wealth-2",
+    "question": "Who can approve a suitability exception, and what is the exception approval limit?",
+    "persona": "demo-advisor",
+    "internal": "internal/suitability-review-procedure.md",
+    "confidential": "confidential/suitability-exception-register-policy.md",
+    "persona_sees": "The approver bands from Branch Manager up to CAD 50,000 to Head of Wealth above CAD 1,000,000, the 25% concentration condition and the 12-month duration.",
+    "reader_sees": "That exceptions need written approval and a register entry, and that the approver levels and limits are held in a confidential policy."
+  },
+  {
+    "id": "wealth-3",
+    "question": "How are advisor bonus tiers calculated, and does an upheld complaint affect the bonus?",
+    "persona": "demo-advisor",
+    "internal": "internal/wealth-complaints-handling.md",
+    "confidential": "confidential/advisor-compensation-grid.md",
+    "persona_sees": "The scorecard weights, the three bonus tiers (10%, 20%, 30% of base salary) and the one-tier reduction for an upheld complaint.",
+    "reader_sees": "That upheld complaints may affect variable pay and that the conditions are defined in a confidential grid, with no figures."
+  }
+]

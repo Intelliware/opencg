@@ -40,6 +40,22 @@ test_confidential_legal_allowed_with_legal if {
 	decide_one(["reader", "legal"], "confidential:legal") == {"allow": true, "reason": "allowed"}
 }
 
+# Demo domains (add-showcase-seed-packs): each domain role opens only its own
+# confidential content, and never another domain's.
+test_demo_domains_allowed_only_with_their_role if {
+	every domain in ["wealth", "payments", "retail"] {
+		decide_one(["reader", domain], concat(":", ["confidential", domain])) == {"allow": true, "reason": "allowed"}
+		decide_one(["reader"], concat(":", ["confidential", domain])) == {"allow": false, "reason": "classification_restricted"}
+	}
+}
+
+test_demo_domain_roles_do_not_cross if {
+	decide_one(["reader", "wealth"], "confidential:retail") == {"allow": false, "reason": "classification_restricted"}
+	decide_one(["reader", "payments"], "confidential:wealth") == {"allow": false, "reason": "classification_restricted"}
+	decide_one(["reader", "retail"], "confidential:payments") == {"allow": false, "reason": "classification_restricted"}
+	decide_one(["reader", "wealth", "payments", "retail"], "confidential:legal") == {"allow": false, "reason": "classification_restricted"}
+}
+
 test_legal_only_principal_gets_legal_content_but_not_internal if {
 	decide_one(["legal"], "confidential:legal") == {"allow": true, "reason": "allowed"}
 	decide_one(["legal"], "internal") == {"allow": false, "reason": "classification_restricted"}

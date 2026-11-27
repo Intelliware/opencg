@@ -1,12 +1,12 @@
 {
   "meta": {
-    "revision": "e6bbccc8df011d66024300208f03e3bd196d60ec32ac9c467e77e1e1bbb56781"
+    "revision": "4afbac13bda3abb502a5e6c8ebc16a15c663e71f6ac3f4df87bc0f2c45e07fc7"
   },
   "classifications": {
     "public": ["reader", "admin"],
     "internal": ["reader", "admin"]
   },
-  "confidential_domains": ["legal"],
+  "confidential_domains": ["legal", "wealth", "payments", "retail"],
   "actions": {
     "retrieve": ["reader", "admin"],
     "search.vector": ["reader", "admin"],

@@ -20,7 +20,7 @@ All pack content MUST be synthetic: a fictional institution and fictional people
 
 #### Scenario: Split answers exist
 
-- **WHEN** `demo/questions.json` is read
+- **WHEN** `demo/packs/<pack>/questions.json` is read
 - **THEN** each pack has at least three questions, each naming the `internal` document that refers to a `confidential` one and the `confidential` document that holds the answer
 
 ### Requirement: Demo seeding
@@ -77,7 +77,7 @@ The demo SHALL define the personas `demo-advisor` (`reader`, `wealth`), `demo-pa
 - `make demo-up` and `make demo-seed`;
 - connecting Claude Code, Claude Desktop and Cursor to the MCP server, with OAuth sign-in as a persona and a per-persona dev API key as fallback;
 - a connection check for each tool;
-- the per-pack script from `demo/questions.json`, with what each persona should see;
+- the per-pack script from `demo/packs/<pack>/questions.json`, with what each persona should see;
 - where to find the trace, audit row and cost of a request;
 - reset, known limitations and troubleshooting.
 
@@ -90,7 +90,7 @@ The README SHALL link to it.
 
 ### Requirement: Demo smoke check
 
-`make demo-smoke` SHALL seed every pack using the deterministic chat stub, then check each pack. For every `(pack, classification)` it SHALL assert the expected entity count. For every scripted question it SHALL assert the split answer for the domain persona and for `demo-reader`. It SHALL then reset. The CI `stack` job SHALL run it on the nightly schedule.
+`make demo-smoke` SHALL seed every pack using the deterministic chat stub, then check each pack. For every `(pack, classification)` it SHALL assert the expected entity count. For every scripted question it SHALL assert the split answer for the domain persona and for `demo-reader`. It SHALL then reset. The CI `stack` job SHALL run it on every pull request.
 
 #### Scenario: Persona difference regresses
 

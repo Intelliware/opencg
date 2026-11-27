@@ -241,6 +241,10 @@ jobs:
           path: hydration-stress.json
           retention-days: 30
           if-no-files-found: ignore
+      # Demo packs (add-showcase-seed-packs): seed all three with the chat stub,
+      # check each persona's split answers, reset. Last, because it recreates
+      # ingestion and pipeline with the demo overlay instead of the e2e one.
+      - run: make demo-smoke
 
       - name: Collect compose logs
         if: failure()

@@ -98,7 +98,7 @@ Content hashing makes re-runs cheap. A re-run after a reset restores tombstoned 
 - Passwords come from `OPENCG__DEMO__PASSWORD`. `.env.example` sets a `dev-only-*` placeholder, so the existing dev-only guard refuses it outside `dev`/`test`.
 - `seed.sh` refuses to run unless `OPENCG__ENVIRONMENT=dev`.
 
-`seed.sh` also writes one dev API key per persona when asked (`DEMO_API_KEYS=1`), for tools without OAuth. It prints each raw key once and appends only the hash to the keys file.
+`seed.sh` also creates one dev API key per persona when asked (`DEMO_API_KEYS=1`), for tools without OAuth. Raw keys go to `demo/.persona-keys` (mode 600, gitignored) and are never printed. Only their SHA-256 goes to `demo/.api-keys.json`, which the demo overlay mounts into pipeline and mcp-server; seeding restarts both so the keys load.
 
 *Alternative:* adding the roles and users to `realm-opencg.json`. That changes the `identity-access` realm requirement, and only takes effect on a fresh Keycloak database, whereas `kcadm` works on a running stack.
 
@@ -115,13 +115,13 @@ Content hashing makes re-runs cheap. A re-run after a reset restores tombstoned 
 
 ### D7. Demo smoke check
 
-`demo/scripts/smoke.sh`, run by `make demo-smoke` and the nightly `stack` job (not every PR, to keep PR CI fast):
+`demo/scripts/smoke.sh`, run by `make demo-smoke` and by the `stack` job on every pull request and nightly (owner decision; it adds about 2–3 minutes):
 1. seeds all packs with the stub;
 2. asserts that the expected number of entities exists per `(pack, classification)` prefix;
 3. for every scripted question, gets client-credentials or API-key tokens for `demo-reader` and the domain persona, calls `/retrieve`, and asserts that the persona sees a fragment from the confidential document while `demo-reader` doesn't;
 4. resets.
 
-The scripted questions live in `demo/questions.json`, so `docs/DEMO.md` and the check use the same list.
+Each pack's scripted questions live in `demo/packs/<pack>/questions.json`, so `docs/DEMO.md` and the check use the same list.
 
 ### D8. Connecting tools
 
@@ -143,5 +143,4 @@ Each tool section ends with a one-line check ("ask: *what are the wire cut-off t
 
 ## Open Questions
 
-- Are the group name **Juniper Bay Financial Group** and the Canadian setting acceptable, or should the owner pick another name or jurisdiction?
-- Should the demo smoke check run on every PR instead of nightly? It adds about 2–3 minutes to `stack`.
+None. The owner approved the proposal on 2026-11-27: one change for packs and guide, Juniper Bay Financial Group in a Canadian setting, and the demo smoke check on every PR.

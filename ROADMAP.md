@@ -24,7 +24,7 @@ Each item has:
 
 ### add-showcase-seed-packs
 
-- **Status:** proposed
+- **Status:** in-progress
 - **Size:** L
 - **Capabilities:** new: showcase-packs, ingestion, smoke-testing
 - **Depends on:** none

@@ -29,7 +29,7 @@ Electric Mind's focus segments are wealth, payments and retail banking. Each nee
   - connecting Claude Code, Claude Desktop and Cursor over MCP, with OAuth sign-in as a persona or a per-persona API key as fallback;
   - a per-pack script: the questions to ask, what each persona should see, which graph view to open, and where to find the trace and cost in Grafana;
   - reset and troubleshooting.
-- **Demo smoke check:** `make demo-smoke`, run in the nightly `stack` job. For each pack it seeds, then asserts that every classification ingested and that the persona differences hold for each scripted question. It uses the deterministic chat stub, so CI needs no Ollama Cloud key.
+- **Demo smoke check:** `make demo-smoke`, run in the `stack` job on every pull request and nightly. For each pack it seeds, then asserts that every classification ingested and that the persona differences hold for each scripted question. It uses the deterministic chat stub, so CI needs no Ollama Cloud key.
 
 ## Capabilities
 
@@ -52,7 +52,7 @@ Electric Mind's focus segments are wealth, payments and retail banking. Each nee
 - **Changed:**
   - `infra/opa/data/opencg.json` (three domains; revision regenerated) and its policy tests;
   - `Makefile` (`demo-up`, `demo-seed`, `demo-reset`, `demo-smoke`);
-  - `.github/workflows/ci.yml` (nightly demo smoke);
+  - `.github/workflows/ci.yml` (demo smoke in the `stack` job);
   - README (a "Try the demo" section), OPERATIONS (a link), CHANGELOG.
 - **Runtime services:** no code changes. Seeding uses the existing ingestion CLI and its local-root allow-list (`OPENCG__INGESTION__GIT__LOCAL_ROOTS`), as the smoke test does.
 - **Cost:** the knowledge-graph part of the demo uses Ollama Cloud extraction, which needs the user's own API key. Seeding all three packs once costs well under US$1 at the published `gemma4:31b` rates, and the trace view shows the exact figure. Without a key, ingestion and retrieval still work, but the graph only has code-derived and smoke-stub concepts.
