@@ -5,6 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
+        Check [`ROADMAP.md`](https://github.com/Intelliware/opencg/blob/main/ROADMAP.md) first: it may already be planned, and you can pick it up there.
+
         openCG changes go through the [OpenSpec workflow](https://github.com/Intelliware/opencg/blob/main/CONTRIBUTING.md#the-openspec-workflow-required): agree on the problem and the approach here first, then the change becomes an `openspec/changes/<name>/` proposal (proposal, design, spec deltas, tasks) that is reviewed before any code is written.
   - type: textarea
     id: problem

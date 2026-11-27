@@ -19,6 +19,7 @@ All notable changes to openCG are recorded here. The format follows [Keep a Chan
 
 ### Added
 
+- **`ROADMAP.md`**: the project backlog, grouped Now / Next / Later. Each item's ID is its OpenSpec change name; proposing a change marks the item `proposed`, and archiving it removes the item. `make check-roadmap` (in `make ci-static`) keeps the roadmap and `openspec/changes/` consistent. `add-foundation` is archived as superseded, with each open task recorded as shipped, moved to the roadmap, or dropped.
 - **Real identity and policy** (`add-identity-and-opa`): `OPENCG__AUTH__MODE=oidc` validates access tokens from any OIDC issuer in every service; the MCP server is an OAuth protected resource; the admin UI signs in with authorization code + PKCE and keeps server-side sessions in Valkey. A bundled Keycloak (`26.8.1`) runs in the same compose project for local use, smoke, e2e and CI.
 - OPA (`1.21.4`) decides every retrieval candidate (one batched call, before the token budget) and every API action, in both auth modes, failing closed with `503 policy_unavailable`. Policies, data and tests live in `infra/opa/` (`make opa-test`, `make opa-revision`).
 - `opencg.access_audit_log` (append-only) records denials and allowed state-changing actions; retrieval audit rows record `auth_method` and each candidate's policy decision and revision. Apply `070_access_audit.sql` to an existing volume with `make db-apply`.

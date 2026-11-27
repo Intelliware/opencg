@@ -80,6 +80,6 @@
 - [x] 9.1 `make ci-static` green (lint, typecheck, unit tests, dashboard lint, `openspec validate add-observability-stack --strict`)
 - [x] 9.2 `make smoke` and `make e2e` green on the default stack; `make smoke-obs` green on the overlay stack
 - [x] 9.3 Run the secrets grep from AGENTS.md on the staged diff; confirm no `.env` changes are staged
-- [ ] 9.4 Note in `add-foundation` follow-up tracking which parts of its observability spec are delivered and which are deferred (spans for future stages, alerting)
+- [x] 9.4 Note in `add-foundation` follow-up tracking which parts of its observability spec are delivered and which are deferred (spans for future stages, alerting) (done 2026-11-27: the Superseded table in `archive/2026-11-27-add-foundation/tasks.md` marks 13.2–13.6 shipped, and moves Loki to roadmap `add-log-aggregation` and alerting to `add-alerting`)
 - [ ] 9.4a Scaffold the follow-up change `add-log-aggregation` (structured JSON logs with `trace_id` and `correlation_id`, Loki in the overlay, trace-to-logs links) and bring it to the owner for approval
 - [ ] 9.5 After merge: `openspec archive add-observability-stack`

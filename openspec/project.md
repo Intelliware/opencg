@@ -10,7 +10,7 @@ openCG builds out the missing components: identity, intent, hybrid retrieval, ca
 
 ## Reference architecture
 
-See `docs/reference-architecture/` and `openspec/changes/add-foundation/design.md` for the diagram and the implementation decisions.
+See `docs/reference-architecture/` and `openspec/changes/archive/2026-11-27-add-foundation/design.md` for the diagram and the implementation decisions.
 
 ## Stack
 

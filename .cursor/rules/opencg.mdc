@@ -24,7 +24,7 @@ This applies to:
 
 **The workflow:**
 
-1. `openspec new change <kebab-case-name>` — creates the scaffold
+1. `openspec new change <kebab-case-name>` — creates the scaffold; use the `ROADMAP.md` item's ID and set it to `proposed`
 2. Write `proposal.md` — why + what + capabilities + impact
 3. Write `design.md` (decisions with rationale, alternatives, risks, open questions) AND `specs/<capability>/spec.md` (testable WHEN/THEN scenarios using SHALL/MUST)
 4. Write `tasks.md` — the implementation checklist organised by phase
@@ -32,21 +32,17 @@ This applies to:
 6. **Stop and show the user the proposal for explicit approval before implementing**
 7. Implement phase by phase. Run tests as you go.
 8. Run the smoke and e2e suites against the live stack (`make smoke`, `make e2e`)
-9. Commit + push
+9. Commit + push. When the change ships, `openspec archive <name>` and delete its `ROADMAP.md` item in the same PR
 
 **Exception**: tiny fixes that don't change a requirement or scenario (typo, lint, dependency bump, perf tweak in an existing function) are code-only OK. When in doubt, write the proposal.
 
 **The strict workflow is non-negotiable.** Skipping it created bugs and confusion early in the project. The user reset that expectation explicitly; honor it.
 
-## In-flight changes
+## Roadmap and in-flight changes
 
-```
-add-foundation                — full v0 vision (canonical aspiration; delivered per capability by follow-up changes)
-```
+`ROADMAP.md` is the backlog: pick `ready` items, and each item's heading is its OpenSpec change name. Proposing a change sets its item to `proposed`, approval sets `in-progress`, and the archive PR deletes the item. `make check-roadmap` enforces this.
 
-Everything else has shipped and is archived under `openspec/changes/archive/` (including `prepare-open-source-release`, the v0.1.0 release work, and `bootstrap-thin-mvp`, archived as superseded); the merged baseline is in `openspec/specs/`. `main` is protected: changes land through pull requests with one approving review and green `static`, `stack`, `observability` and `dependency-review` checks.
-
-Check the live state any time with `openspec list`.
+In-flight changes: run `openspec list`. Shipped changes are archived under `openspec/changes/archive/` (including `add-foundation`, the original v0 vision, archived as superseded on 2026-11-27 with its open tasks moved to the roadmap); the merged baseline is in `openspec/specs/`. `main` is protected: changes land through pull requests with one approving review and green `static`, `stack`, `observability` and `dependency-review` checks.
 
 ## Stack at a glance
 

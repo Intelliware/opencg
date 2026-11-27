@@ -25,7 +25,7 @@ PROFILES := --profile dev $(if $(BUNDLED_IDP),--profile idp)
 # down/down-v always name `idp` so a Keycloak started earlier is removed too.
 PROFILES_ALL := --profile dev --profile idp
 
-.PHONY: help bootstrap up up-d up-obs down down-v logs ps db-apply opa-test opa-revision test test-mcp test-shared test-pipeline test-ingestion test-ui test-scripts lint typecheck format smoke smoke-cloud smoke-obs e2e e2e-ui hydration-stress ingest-git storybook check-agent-guides check-dashboards openspec-validate secrets-scan ci ci-static ci-stack api-key
+.PHONY: help bootstrap up up-d up-obs down down-v logs ps db-apply opa-test opa-revision test test-mcp test-shared test-pipeline test-ingestion test-ui test-scripts lint typecheck format smoke smoke-cloud smoke-obs e2e e2e-ui hydration-stress ingest-git storybook check-agent-guides check-dashboards check-roadmap openspec-validate secrets-scan ci ci-static ci-stack api-key
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -149,6 +149,9 @@ opa-revision: ## Recompute infra/opa/data/opencg.json meta.revision after editin
 check-agent-guides: ## Fail if the AGENTS.md / CLAUDE.md / .cursor/rules/opencg.mdc bodies differ
 	./scripts/check-agent-guides.sh
 
+check-roadmap: ## Fail if ROADMAP.md is malformed or out of step with openspec/changes/
+	python3 scripts/check-roadmap.py
+
 check-dashboards: ## Lint the Grafana dashboards (and promtool-check prometheus.yml when Docker is up)
 	uv run --package opencg-shared python scripts/check-dashboards.py
 
@@ -161,7 +164,7 @@ secrets-scan: ## Scan the full git history of branches and tags for secrets (git
 	docker run --rm -v "$(CURDIR):/repo" $(GITLEAKS_IMAGE) detect --source /repo --redact --no-banner \
 		--log-opts="--branches --tags"
 
-ci-static: lint typecheck test opa-test storybook check-agent-guides check-dashboards openspec-validate secrets-scan ## CI's static job, locally
+ci-static: lint typecheck test opa-test storybook check-agent-guides check-dashboards check-roadmap openspec-validate secrets-scan ## CI's static job, locally
 
 ci-stack: ## CI's stack job, locally: start the stack, then smoke and e2e (needs .env)
 	$(COMPOSE) $(PROFILES) up -d --wait

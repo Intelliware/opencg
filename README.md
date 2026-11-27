@@ -45,9 +45,7 @@ The thin MVP, the first end-to-end working slice, runs in Docker Compose, with a
 | 2026-11-10 | `prepare-open-source-release` | The v0.1.0 release work: fresh-clone fixes, loopback-only defaults, an optional admin login, ingestion URL validation, the Playwright e2e suite, CI, branch protection, and community files |
 | 2026-11-10 | `bootstrap-thin-mvp` | The v0 stack contract: MCP server, retrieval pipeline, git ingestion, audit log, compose. Archived as superseded; its open items are recorded against later changes |
 
-**In flight** ([`openspec list`](./openspec/changes/)):
-
-- **[`add-foundation`](./openspec/changes/add-foundation/)** is the **full v0 vision**, spanning 12 capabilities: intent classifier, rerank and compression, OPA enforcement, more connectors, enrichment workers, the Tempo/Grafana stack, and more. Each deferred capability ships as its own follow-up change that modifies the requirements earlier changes set.
+**What's next** is in [`ROADMAP.md`](./ROADMAP.md): the prioritised backlog, with each item's status. Changes in progress are listed by [`openspec list`](./openspec/changes/).
 
 ## Stack
 
@@ -229,7 +227,7 @@ Every shared component has a Storybook story neighbour.
 - **Observability**: one OTel trace per MCP tool call across the MCP server and pipeline, with `correlation_id` on every span and a child span per model call; `/metrics` on the pipeline, ingestion and MCP server; token usage and estimated cost per provider in every usage envelope, audit row and admin UI view; a compose-local OTel Collector. Prometheus, Tempo and Grafana with six dashboards are an opt-in overlay (`make up-obs`).
 - **Immutable audit log** at `opencg.audit_log` (range-partitioned on `created_at`, with a row-level immutability trigger).
 
-**Not in v0:** intent classifier, Confluence/custom-API/web connectors, background enrichment workers, log aggregation (Loki, planned as `add-log-aggregation`), alerting, a `local-prod` compose profile, multi-tenancy, and entitlement on individual graph concepts and edges.
+**Not in v0:** see [`ROADMAP.md`](./ROADMAP.md) for planned work, including connectors beyond git, intent classification, rerank, background enrichment, log aggregation and alerting, a `local-prod` profile, multi-tenancy, and entitlement on graph concepts and edges.
 
 ## API reference
 
@@ -368,8 +366,8 @@ CI runs `static` and `dependency-review` on every pull request, and the full-sta
 ```bash
 openspec list                                  # changes in flight
 openspec list --specs                          # the archived spec baseline
-openspec show add-foundation                   # the full v0 vision
-openspec validate add-foundation --strict      # re-validate
+openspec show <name>                           # render a change
+openspec validate <name> --strict              # re-validate
 ```
 
 ## Where to read
@@ -378,7 +376,8 @@ openspec validate add-foundation --strict      # re-validate
 |---|---|
 | [`openspec/project.md`](./openspec/project.md) | Vision, stack, conventions |
 | [`openspec/specs/`](./openspec/specs/) | The archived spec baseline: 12 capability specs |
-| [`openspec/changes/add-foundation/`](./openspec/changes/add-foundation/) | The full v0 vision (12 capabilities) |
+| [`ROADMAP.md`](./ROADMAP.md) | The backlog: what to build next, and how to pick an item up |
+| [`openspec/changes/archive/2026-11-27-add-foundation/`](./openspec/changes/archive/2026-11-27-add-foundation/) | The original v0 vision, archived; its open tasks were moved to the roadmap |
 | [`openspec/changes/archive/2026-06-12-add-knowledge-graph/`](./openspec/changes/archive/2026-06-12-add-knowledge-graph/) | The shipped knowledge-graph contract |
 | [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) | Operating the stack: ports and network exposure, the admin gate, ingestion, test overlays, swapping embedding models, troubleshooting |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Setup, the OpenSpec workflow, the test tiers, PR expectations |

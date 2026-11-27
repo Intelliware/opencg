@@ -30,11 +30,21 @@ Every published port binds to `127.0.0.1` and can be moved in `.env` if somethin
 
 `make help` lists every target.
 
+## Picking up work
+
+[`ROADMAP.md`](./ROADMAP.md) is the backlog. Pick an item with status `ready`, preferably from **Now**, and check what it depends on. Its heading is the name of the OpenSpec change you'll create. To suggest something that isn't there, add an item in a pull request or open a feature proposal issue.
+
+- **Starting:** in your proposal PR, set the item to `proposed` and add yourself as `Owner`.
+- **Approved:** set it to `in-progress`.
+- **Shipped:** the PR that runs `openspec archive <id>` deletes the item. The CHANGELOG and the README's shipped table record it from then on.
+
+`make check-roadmap` (part of `make ci-static`) fails if the roadmap and `openspec/changes/` disagree, and says how to fix it.
+
 ## The OpenSpec workflow (required)
 
 Every feature, scope change, architectural pivot, significant dependency change, or anything that adds, changes or removes a requirement goes through an [OpenSpec](https://github.com/Fission-AI/OpenSpec) change **before code is written**:
 
-1. `openspec new change <kebab-case-name>`
+1. `openspec new change <kebab-case-name>`, using the roadmap item's ID, and set the item to `proposed` (add an item first if there isn't one)
 2. Write `proposal.md`: why, what changes, affected capabilities, impact.
 3. Write `design.md` (decisions with alternatives, risks, open questions) and `specs/<capability>/spec.md` (requirements using SHALL/MUST, each with testable WHEN/THEN scenarios).
 4. Write `tasks.md`: the implementation checklist, grouped by phase.
@@ -42,7 +52,7 @@ Every feature, scope change, architectural pivot, significant dependency change,
 6. Open the proposal for review and get agreement **before implementing**.
 7. Implement phase by phase, ticking tasks as you go. Anything you discover along the way is recorded in the change, not worked around silently.
 8. Run the smoke and e2e suites against a live stack.
-9. When it ships, `openspec archive <name>` merges the change's spec deltas into `openspec/specs/`.
+9. When it ships, `openspec archive <name>` merges the change's spec deltas into `openspec/specs/`; delete the item from `ROADMAP.md` in the same PR.
 
 Tiny fixes that change no requirement or scenario (a typo, a lint fix, a dependency bump) can go straight to code. When in doubt, write the proposal.
 
